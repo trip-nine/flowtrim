@@ -1,0 +1,108 @@
+# FlowTrim example configuration
+# Validate with:  flowtrim check -config flowtrim.yaml
+#
+# Start in shadow mode. It forwards everything unreduced and reports what
+# enforce mode would save (GET /shadow, plus a shadow_report event in NG-SIEM).
+mode: shadow            # shadow | enforce
+log_level: info
+
+networks:
+  # What counts as "yours". Drives direction: internal | outbound | inbound | external
+  internal: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7"]
+
+inputs:
+  netflow:                       # NetFlow v5/v9 + IPFIX (auto-detected per packet)
+    listen: ["0.0.0.0:2055", "0.0.0.0:4739"]
+    sockets: 2                   # SO_REUSEPORT sockets per address
+    workers: 4
+    queue_size: 200000
+    # allowed_exporters: ["192.0.2.0/24"]    # recommended: only accept your routers
+  # sflow:
+  #   listen: ["0.0.0.0:6343"]
+  # aws_firehose:                # Amazon Data Firehose "HTTP endpoint" destination
+  #   listen: "0.0.0.0:8443"
+  #   tls_cert: /etc/flowtrim/tls.crt
+  #   tls_key:  /etc/flowtrim/tls.key
+  #   access_key: "${FIREHOSE_ACCESS_KEY}"
+  #   # must match the flow log's custom format, in order (default = AWS v2 format):
+  #   fields: [version, account-id, interface-id, srcaddr, dstaddr, srcport, dstport,
+  #            protocol, packets, bytes, start, end, action, log-status]
+
+normalize:
+  scale_by_sampling_rate: true   # multiply bytes/packets by the exporter's sampling rate
+
+rules:
+  # 1) BYPASS: never reduced, always forwarded raw. Put anything security-critical here.
+  bypass:
+    - name: threat_intel
+      match: { any_ip_in_list: intel.txt }          # relative to this file
+    - name: denied_traffic
+      match: { action: [REJECT, DENY] }
+    - name: lateral_movement_ports
+      match: { direction: [internal], dst_port: ["22", "135", "139", "445", "3389", "5985-5986"] }
+
+  # 2) DROP: known-boring traffic. Every drop is counted in a drop_summary record.
+  drop:
+    - name: multicast_broadcast
+      match: { dst_cidr: ["224.0.0.0/4", "255.255.255.255/32", "ff00::/8"] }
+    - name: dns_to_corp_resolvers
+      match: { proto: [udp], dst_port: ["53"], dst_cidr: ["10.0.0.53/32"] }
+    - name: ntp_to_corp_servers
+      match: { proto: [udp], dst_port: ["123"], dst_cidr: ["10.0.0.123/32"] }
+    - name: aws_nodata
+      match: { log_status: [NODATA, SKIPDATA] }
+
+  # 3) DEDUP: the same flow exported by several routers on the path.
+  dedup:
+    enabled: true
+    key: [src_ip, dst_ip, src_port, dst_port, proto, start_time, bytes, packets]
+    start_tolerance: 1s
+    window: 30s
+    apply_to_bypass: true        # exact duplicates of bypassed flows carry no extra signal
+
+  # 4) ROLLUP: one record per conversation per window, with security-preserving stats
+  #    (first/last seen, flow count, byte/packet sums, TCP-flag union,
+  #    inter-arrival min/max/mean/stddev for beaconing, distinct src ports).
+  rollup:
+    enabled: true
+    window: 60s
+    key: [src_ip, dst_ip, dst_port, proto, action]
+    match: { direction: [internal, outbound] }   # leave inbound/external raw
+    max_keys: 500000
+    iat_samples: 64
+
+  # Scan/sweep visibility that survives rollup: per-source distinct dsts/ports.
+  fanout:
+    enabled: true
+    window: 60s
+    min_unique_dst_ips: 50
+    min_unique_dst_ports: 50
+
+  drop_summary:
+    enabled: true
+    interval: 60s
+
+  # Remove fields you never search on (dotted paths into the OCSF record).
+  prune_fields: []
+
+output:
+  ngsiem:
+    # From Falcon console > Next-Gen SIEM > Data onboarding > HEC/HTTP Event Data Connector.
+    # Either form works: https://<id>.ingest.us-1.crowdstrike.com  or  .../services/collector
+    url: "${NGSIEM_URL}"
+    token: "${NGSIEM_TOKEN}"
+    gzip: true
+    concurrency: 4
+    timeout: 15s
+    batch: { max_events: 1000, max_bytes: 2MiB, max_wait: 2s }
+    retry: { initial: 500ms, max: 60s }
+    queue:
+      dir: /var/lib/flowtrim/queue    # disk buffer survives restarts and NG-SIEM outages
+      max_bytes: 10GiB
+      overflow: drop_oldest           # or: block (backpressure to the UDP socket)
+    # proxy: "http://proxy.corp:3128" # default: HTTPS_PROXY env; "none" = direct
+    # tls: { ca_file: /etc/ssl/corp-ca.pem }
+
+telemetry:
+  listen: "0.0.0.0:9109"           # /metrics /healthz /readyz /shadow
+  shadow_report_interval: 5m

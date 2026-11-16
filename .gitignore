@@ -1,0 +1,7 @@
+bin/
+dist/
+*.batch
+*.tmp
+.env
+flowtrim.env
+coverage.out

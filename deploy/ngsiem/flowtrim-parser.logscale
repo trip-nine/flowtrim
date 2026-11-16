@@ -1,0 +1,42 @@
+// FlowTrim → Falcon Next-Gen SIEM starter parser (LogScale Query Language)
+//
+// STATUS: starter. Validate field names and CPS conventions in your tenant
+// (Next-Gen SIEM > Log management > Parsers > Test) before relying on it.
+//
+// Input: each HEC event is FlowTrim's OCSF-shaped JSON object.
+// @timestamp is already set from the HEC "time" field (flow end).
+
+parseJson(prefix="Vendor.", excludeEmpty=true)
+| #Vendor := "flowtrim"
+| #Product := "flowtrim"
+| #event.module := "flowtrim"
+| event.category[0] := "network"
+| event.type[0] := "connection"
+| ecs.version := "8.11.0"
+| Cps.version := "1.0.0"
+
+// Endpoints and connection
+| source.ip := Vendor.src_endpoint.ip
+| source.port := Vendor.src_endpoint.port
+| destination.ip := Vendor.dst_endpoint.ip
+| destination.port := Vendor.dst_endpoint.port
+| network.iana_number := Vendor.connection_info.protocol_num
+| network.transport := Vendor.connection_info.protocol_name
+| network.direction := Vendor.unmapped.flowtrim.direction   // internal | outbound | inbound | external (ECS values)
+| network.bytes := Vendor.traffic.bytes
+| network.packets := Vendor.traffic.packets
+| observer.ip := Vendor.device.ip
+
+// Allowed / denied
+| case {
+    Vendor.action_id = 1 | event.outcome := "success" | event.action := "allowed";
+    Vendor.action_id = 2 | event.outcome := "failure" | event.action := "denied";
+    * ;
+  }
+
+// Distinguish traffic from FlowTrim's own summary records
+| case {
+    Vendor.unmapped.flowtrim.record_type = * | #event.kind := "metric" | flowtrim.record_type := Vendor.unmapped.flowtrim.record_type;
+    * | #event.kind := "event" | flowtrim.reduction := Vendor.unmapped.flowtrim.reduction;
+  }
+| event.duration := (Vendor.end_time - Vendor.start_time) * 1000000

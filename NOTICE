@@ -1,0 +1,21 @@
+FlowTrim
+Copyright 2026 The FlowTrim Authors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product links the following third-party software:
+
+  goflow2 (github.com/netsampler/goflow2/v2)          BSD-3-Clause  Copyright (c) 2021, NetSampler
+  Prometheus Go client (github.com/prometheus/*)       Apache-2.0
+  go-yaml v3 (gopkg.in/yaml.v3)                        MIT and Apache-2.0
+  go.yaml.in/yaml/v2                                   Apache-2.0
+  golang.org/x/sys                                     BSD-3-Clause
+  google.golang.org/protobuf                           BSD-3-Clause
+  github.com/libp2p/go-reuseport                       ISC
+  github.com/cespare/xxhash/v2                         MIT
+  github.com/beorn7/perks                              MIT
+  github.com/munnerz/goautoneg                         BSD-3-Clause
+
+"CrowdStrike", "Falcon" and "Falcon Next-Gen SIEM" are trademarks of
+CrowdStrike, Inc. They are used only to describe interoperability. This
+project contains no code, schema or field definitions from ElastiFlow.

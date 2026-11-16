@@ -1,0 +1,31 @@
+# Self-contained demo: FlowTrim (shadow mode) + mock NG-SIEM + traffic generator.
+#   docker compose -f deploy/docker/docker-compose.demo.yaml up --build
+#   then: curl -s localhost:9109/shadow   and   curl -s localhost:8088/stats
+services:
+  mockhec:
+    build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
+    entrypoint: ["/usr/local/bin/mockhec", "-listen", "0.0.0.0:8088", "-token", "demo-token"]
+    ports: ["8088:8088"]
+
+  flowtrim:
+    build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
+    environment:
+      NGSIEM_URL: http://mockhec:8088
+      NGSIEM_TOKEN: demo-token
+    command: ["run", "-config", "/etc/flowtrim/demo.yaml"]
+    volumes:
+      - ./demo.yaml:/etc/flowtrim/demo.yaml:ro
+      - ../../examples/intel.txt:/etc/flowtrim/intel.txt:ro
+      - flowtrim-queue:/var/lib/flowtrim
+    ports: ["9109:9109"]
+    sysctls:
+      net.core.rmem_max: 33554432   # allowed in a container's own netns on modern kernels
+    depends_on: [mockhec]
+
+  flowgen:
+    build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
+    entrypoint: ["/usr/local/bin/flowgen", "-target", "flowtrim:2055", "-rate", "3000", "-duration", "120s", "-dup-from", ""]
+    depends_on: [flowtrim]
+
+volumes:
+  flowtrim-queue: {}
