@@ -86,18 +86,22 @@ rules:
   prune_fields: []
 
 output:
-  ngsiem:
-    # From Falcon console > Next-Gen SIEM > Data onboarding > HEC/HTTP Event Data Connector.
+  hec:
+    # target: ngsiem = Falcon NG-SIEM HEC/HTTP Event Data Connector (direct, layout C)
+    #         onum   = Falcon Onum Splunk-HEC Listener, which forwards to NG-SIEM (layout A)
+    #         generic = any HEC-compatible receiver (URL must include the path)
+    target: ngsiem
+    # NG-SIEM: Falcon console > Next-Gen SIEM > Data onboarding > HEC/HTTP Event Data Connector.
     # Either form works: https://<id>.ingest.us-1.crowdstrike.com  or  .../services/collector
-    url: "${NGSIEM_URL}"
-    token: "${NGSIEM_TOKEN}"
-    gzip: true
+    url: "${HEC_URL}"
+    token: "${HEC_TOKEN}"
+    gzip: true                        # auto-falls back to uncompressed if the receiver can't read gzip
     concurrency: 4
     timeout: 15s
     batch: { max_events: 1000, max_bytes: 2MiB, max_wait: 2s }
     retry: { initial: 500ms, max: 60s }
     queue:
-      dir: /var/lib/flowtrim/queue    # disk buffer survives restarts and NG-SIEM outages
+      dir: /var/lib/flowtrim/queue    # disk buffer survives restarts and receiver outages
       max_bytes: 10GiB
       overflow: drop_oldest           # or: block (backpressure to the UDP socket)
     # proxy: "http://proxy.corp:3128" # default: HTTPS_PROXY env; "none" = direct

@@ -36,7 +36,7 @@ const HECPath = "/services/collector"
 
 // NGSIEM is the output.
 type NGSIEM struct {
-	cfg      *config.NGSIEM
+	cfg      *config.HEC
 	url      string
 	auth     string
 	client   *http.Client
@@ -61,7 +61,10 @@ type line struct {
 }
 
 // NormalizeURL appends /services/collector when the URL has no path.
-func NormalizeURL(raw string) (string, error) {
+func NormalizeURL(raw string) (string, error) { return NormalizeURLPath(raw, HECPath) }
+
+// NormalizeURLPath appends defPath when the URL has no path.
+func NormalizeURLPath(raw, defPath string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return "", err
@@ -69,23 +72,23 @@ func NormalizeURL(raw string) (string, error) {
 	if u.Scheme != "https" && u.Scheme != "http" {
 		return "", fmt.Errorf("url scheme must be https")
 	}
-	if u.Path == "" || u.Path == "/" {
-		u.Path = HECPath
+	if (u.Path == "" || u.Path == "/") && defPath != "" {
+		u.Path = defPath
 	}
 	return u.String(), nil
 }
 
 // New builds the output. stdout (optional) also receives every NDJSON line.
-func New(cfg *config.NGSIEM, log *slog.Logger, shadow *telemetry.Shadow, stdout io.Writer) (*NGSIEM, error) {
+func New(cfg *config.HEC, log *slog.Logger, shadow *telemetry.Shadow, stdout io.Writer) (*NGSIEM, error) {
 	o := &NGSIEM{cfg: cfg, log: log, shadow: shadow, stdout: stdout, encoders: 4}
 	o.in = make(chan ocsf.Event, 65536)
 	o.lines = make(chan line, 65536)
 	if cfg == nil { // stdout-only mode
 		return o, nil
 	}
-	u, err := NormalizeURL(cfg.URL)
+	u, err := NormalizeURLPath(cfg.URL, cfg.Path)
 	if err != nil {
-		return nil, fmt.Errorf("output.ngsiem.url: %w", err)
+		return nil, fmt.Errorf("output.hec.url: %w", err)
 	}
 	o.url = u
 	o.auth = strings.TrimSpace(cfg.AuthScheme + " " + cfg.Token)
@@ -102,7 +105,7 @@ func New(cfg *config.NGSIEM, log *slog.Logger, shadow *telemetry.Shadow, stdout 
 	default:
 		pu, err := url.Parse(cfg.Proxy)
 		if err != nil {
-			return nil, fmt.Errorf("output.ngsiem.proxy: %w", err)
+			return nil, fmt.Errorf("output.hec.proxy: %w", err)
 		}
 		tr.Proxy = http.ProxyURL(pu)
 	}
@@ -117,7 +120,7 @@ func New(cfg *config.NGSIEM, log *slog.Logger, shadow *telemetry.Shadow, stdout 
 			pool = x509.NewCertPool()
 		}
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("output.ngsiem.tls.ca_file: no certificates found")
+			return nil, fmt.Errorf("output.hec.tls.ca_file: no certificates found")
 		}
 		tc.RootCAs = pool
 	}
@@ -133,7 +136,7 @@ func New(cfg *config.NGSIEM, log *slog.Logger, shadow *telemetry.Shadow, stdout 
 
 	q, err := queue.New(cfg.Queue.Dir, int64(cfg.Queue.MaxBytes), cfg.Queue.Overflow)
 	if err != nil {
-		return nil, fmt.Errorf("output.ngsiem.queue: %w", err)
+		return nil, fmt.Errorf("output.hec.queue: %w", err)
 	}
 	q.OnDrop = func(b queue.Batch) {
 		telemetry.OutBatches.WithLabelValues("dropped_overflow").Inc()
@@ -193,7 +196,7 @@ func (o *NGSIEM) Close(drainTimeout time.Duration) {
 		if o.cfg.Queue.Dir != "" {
 			o.log.Info("shutdown: batches left on disk will be sent on next start", "batches", n)
 		} else {
-			o.log.Warn("shutdown: undelivered in-memory batches lost (configure output.ngsiem.queue.dir)", "batches", n)
+			o.log.Warn("shutdown: undelivered in-memory batches lost (configure output.hec.queue.dir)", "batches", n)
 		}
 	}
 }
@@ -365,7 +368,9 @@ func classify(code int, compressed bool) outcome {
 		return okSent
 	case code == 413:
 		return split
-	case code == 415 && compressed:
+	case (code == 415 || code == 400) && compressed:
+		// receivers that can't read gzip answer 415 or 400; resend uncompressed
+		// once before treating it as a bad batch
 		return noGzip
 	case code == 401 || code == 403:
 		return authErr
@@ -445,7 +450,7 @@ func (o *NGSIEM) deliver(b queue.Batch) {
 		case retry:
 			telemetry.OutBatches.WithLabelValues("retry").Inc()
 			if err == nil && (attempt == 0 || attempt%10 == 0) {
-				o.log.Warn("NG-SIEM asked us to retry", "batch", b.ID, "status", code, "attempt", attempt+1)
+				o.log.Warn("receiver asked us to retry", "batch", b.ID, "status", code, "attempt", attempt+1)
 			}
 			if !o.backoff(attempt, ra) {
 				o.q.Nack(b.ID)
@@ -453,22 +458,43 @@ func (o *NGSIEM) deliver(b queue.Batch) {
 			}
 		case authErr:
 			telemetry.OutBatches.WithLabelValues("auth_error").Inc()
-			o.log.Error("NG-SIEM rejected the API key (check output.ngsiem.token / connector status); holding data and retrying", "status", code, "batch", b.ID)
+			o.log.Error("receiver rejected the token (check output.hec.token and the connector/Listener); holding data and retrying", "status", code, "batch", b.ID)
 			if !o.backoff(16, 0) {
 				o.q.Nack(b.ID)
 				return
 			}
 		case noGzip:
-			o.log.Warn("NG-SIEM returned 415 for gzip body; disabling gzip and resending uncompressed")
-			o.gzipOn.Store(false)
 			raw, err := gunzip(b.Data)
 			if err != nil {
 				o.q.DeadLetter(b.ID)
 				return
 			}
-			_ = o.q.Put(raw, b.Events, false)
-			o.q.Ack(b.ID)
-			return
+			// Probe: is it the compression or the content? Only a success
+			// uncompressed proves the receiver can't read gzip.
+			probe := queue.Batch{ID: b.ID, Data: raw, Events: b.Events}
+			pc, _, perr := o.post(probe)
+			if perr == nil && pc >= 200 && pc < 300 {
+				o.log.Warn("receiver cannot read gzip bodies; gzip disabled for this run (set gzip: false to make it permanent)", "status", code)
+				o.gzipOn.Store(false)
+				telemetry.OutBatches.WithLabelValues("ok").Inc()
+				telemetry.OutEvents.Add(float64(b.Events))
+				telemetry.OutWireBytes.Add(float64(len(raw)))
+				telemetry.OutRawBytes.Add(float64(len(raw)))
+				o.q.Ack(b.ID)
+				return
+			}
+			if perr == nil && classify(pc, false) == dead {
+				telemetry.OutBatches.WithLabelValues("dead_letter").Inc()
+				telemetry.EventsDropped.WithLabelValues("dead_letter").Add(float64(b.Events))
+				o.log.Error("receiver rejected batch permanently (also uncompressed); moved to dead-letter", "status", pc, "batch", b.ID)
+				o.q.DeadLetter(b.ID)
+				return
+			}
+			// transient error during the probe: keep the original and retry later
+			if !o.backoff(attempt, 0) {
+				o.q.Nack(b.ID)
+				return
+			}
 		case split:
 			raw := b.Data
 			if b.Compressed {
@@ -482,7 +508,7 @@ func (o *NGSIEM) deliver(b queue.Batch) {
 			if len(lines) <= 1 {
 				telemetry.OutBatches.WithLabelValues("dead_letter").Inc()
 				telemetry.EventsDropped.WithLabelValues("oversize_event").Inc()
-				o.log.Error("single event too large for NG-SIEM (413); dead-lettered", "batch", b.ID, "bytes", len(raw))
+				o.log.Error("single event too large for receiver (413); dead-lettered", "batch", b.ID, "bytes", len(raw))
 				o.q.DeadLetter(b.ID)
 				return
 			}
@@ -501,13 +527,13 @@ func (o *NGSIEM) deliver(b queue.Batch) {
 				}
 				_ = o.q.Put(data, len(part), comp)
 			}
-			o.log.Info("NG-SIEM returned 413; split batch", "batch", b.ID, "events", b.Events)
+			o.log.Info("receiver returned 413; split batch", "batch", b.ID, "events", b.Events)
 			o.q.Ack(b.ID)
 			return
 		case dead:
 			telemetry.OutBatches.WithLabelValues("dead_letter").Inc()
 			telemetry.EventsDropped.WithLabelValues("dead_letter").Add(float64(b.Events))
-			o.log.Error("NG-SIEM rejected batch permanently; moved to dead-letter", "status", code, "batch", b.ID, "events", b.Events)
+			o.log.Error("receiver rejected batch permanently; moved to dead-letter", "status", code, "batch", b.ID, "events", b.Events)
 			o.q.DeadLetter(b.ID)
 			return
 		}

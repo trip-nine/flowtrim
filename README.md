@@ -1,6 +1,6 @@
 # FlowTrim
 
-**Collect flow logs, keep the signal, cut the volume, and ship the rest to Falcon Next-Gen SIEM over HTTPS.**
+**Collect flow logs, keep the signal, cut the volume, and ship the rest over HTTPS to Falcon Onum or straight to Falcon Next-Gen SIEM.**
 
 FlowTrim is a single Go binary with one YAML file. It receives NetFlow v5/v9, IPFIX, sFlow v5 and AWS VPC Flow Logs (via Amazon Data Firehose). It then deduplicates, drops known-boring traffic and rolls up chatty conversations, while keeping the statistics that detections need. The result goes to the **Falcon Next-Gen SIEM HEC/HTTP Event Data Connector** as OCSF-shaped JSON.
 
@@ -57,7 +57,7 @@ sed -e 's#/var/lib/flowtrim/queue#/tmp/flowtrim-demo/queue#' \
     -e 's#"0.0.0.0:9109"#"127.0.0.1:9109"#' \
     -e 's#window: 60s#window: 5s#g' -e 's#shadow_report_interval: 5m#shadow_report_interval: 10s#' \
     examples/flowtrim.yaml > /tmp/flowtrim-demo/flowtrim.yaml
-export NGSIEM_URL=http://127.0.0.1:8088 NGSIEM_TOKEN=test-token
+export HEC_URL=http://127.0.0.1:8088 HEC_TOKEN=test-token
 ./bin/mockhec >/tmp/flowtrim-demo/mock.log 2>&1 & MOCK=$!
 ./bin/flowtrim -config /tmp/flowtrim-demo/flowtrim.yaml 2>/tmp/flowtrim-demo/flowtrim.log & FT=$!
 trap 'kill $FT $MOCK 2>/dev/null || true' EXIT
@@ -69,15 +69,32 @@ curl -s 127.0.0.1:9109/shadow
 FLOWTRIM_DEMO
 ```
 
-## Production setup with Falcon Next-Gen SIEM
+## Where FlowTrim fits
 
-1. **Create the connector.** In the Falcon console, go to *Next-Gen SIEM → Data onboarding → Add data connector → HEC / HTTP Event Data Connector*. Assign a parser (start from [`deploy/ngsiem/flowtrim-parser.logscale`](deploy/ngsiem/flowtrim-parser.logscale)), save, then **Generate API key**. Copy the API key, which is shown only once, and the API URL.
-2. **Configure FlowTrim.** Copy [`examples/flowtrim.yaml`](examples/flowtrim.yaml) to `/etc/flowtrim/flowtrim.yaml`. Put the URL and key in the environment (`NGSIEM_URL`, `NGSIEM_TOKEN`), never in the file. The URL works with or without the `/services/collector` suffix.
-3. **Validate.** Run `flowtrim check -config /etc/flowtrim/flowtrim.yaml`.
-4. **Run in `mode: shadow` for at least a week.** Everything is forwarded unreduced. `GET :9109/shadow` and a `shadow_report` event in NG-SIEM show what enforce mode *would* send, per rule.
-5. **Review, tune, and switch to `mode: enforce`.** Mode changes need a restart. Rule edits reload live with `kill -HUP`.
+FlowTrim is **not** a one-box ElastiFlow clone. With the CrowdStrike stack, **FlowTrim + Falcon Onum + Falcon NG-SIEM** together cover what ElastiFlow does:
 
-Deployment files: [`deploy/systemd`](deploy/systemd), [`deploy/docker`](deploy/docker) (with a docker-compose demo), [`deploy/sysctl`](deploy/sysctl/99-flowtrim.conf).
+| Job | Owner |
+|---|---|
+| Get flows off the wire without loss; normalize; **flow-aware reduction** | **FlowTrim** |
+| Enrichment, routing, masking, other destinations | **Falcon Onum** (optional) |
+| Storage, search, dashboards, detections | **Falcon NG-SIEM** |
+
+| Layout | Flow | Profile |
+|---|---|---|
+| **A** (recommended with Onum) | exporters → FlowTrim → Onum HEC Listener → NG-SIEM | `examples/profiles/onum-onprem.yaml`, `onum-cloud.yaml` |
+| **C** (no Onum) | exporters → FlowTrim → NG-SIEM HEC connector | `examples/profiles/ngsiem-direct.yaml` |
+| Collector-only | exporters → FlowTrim (no reduction) → Onum does all reduction | `examples/profiles/collector-only.yaml` |
+
+Diagrams and the reasoning behind them are in [docs/01-overview.md](docs/01-overview.md).
+
+## Production setup (summary)
+
+1. Prepare the receiver: an NG-SIEM HEC/HTTP Event Data Connector (API URL and key), **or** an Onum HEC Listener wired to an NG-SIEM Data Sink.
+2. Install FlowTrim (binary + systemd, or Docker), copy the profile for your layout, and put `HEC_URL` and `HEC_TOKEN` in the environment.
+3. Run `flowtrim check`, then start in `mode: shadow` and leave it for a week.
+4. Tune using `/shadow` and the `drop_summary` records, then switch to `mode: enforce`.
+
+Full walkthrough: [docs/02-setup.md](docs/02-setup.md).
 
 ## Output format
 
@@ -109,9 +126,15 @@ The most useful alerts: `rate(flowtrim_flows_rejected_total[5m]) > 0`, `flowtrim
 
 ## Documentation
 
-- [docs/PLAN.md](docs/PLAN.md): architecture, roadmap, and the **risks and unknowns register**
-- [docs/RULES.md](docs/RULES.md): rule reference and a tuning playbook
-- [docs/BENCHMARKS.md](docs/BENCHMARKS.md): what was measured and how
+| Doc | For |
+|---|---|
+| [01 Overview](docs/01-overview.md) | What FlowTrim is, the ElastiFlow capability map, layouts, diagrams |
+| [02 Setup](docs/02-setup.md) | Install, receiver setup (NG-SIEM / Onum), exporter configs, verification, go-live |
+| [03 User guide](docs/03-user-guide.md) | Modes, reading records, NG-SIEM searches, operations, alerts, troubleshooting |
+| [04 Configuration](docs/04-configuration.md) | Every key, type and default |
+| [Rules playbook](docs/RULES.md) | Match syntax and tuning |
+| [Plan and unknowns](docs/PLAN.md) | Roadmap and the risks and unknowns register |
+| [Benchmarks](docs/BENCHMARKS.md) | What was measured and how |
 
 ## Status
 

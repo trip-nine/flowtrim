@@ -1,0 +1,21 @@
+# Layout A with Onum Cloud. Onum's NetFlow Listener is not offered in Cloud
+# tenants, so FlowTrim is the UDP-to-HTTPS bridge. Cloud Listeners use port 443
+# with Onum-managed TLS.
+mode: shadow
+inputs:
+  netflow: { listen: ["0.0.0.0:2055", "0.0.0.0:4739"] }
+rules:
+  bypass:
+    - { name: denied_traffic, match: { action: [REJECT, DENY] } }
+  drop:
+    - { name: multicast_broadcast, match: { dst_cidr: ["224.0.0.0/4", "255.255.255.255/32", "ff00::/8"] } }
+  dedup:  { enabled: true }
+  rollup: { enabled: true, window: 60s, match: { direction: [internal, outbound] } }
+  fanout: { enabled: true }
+output:
+  hec:
+    target: onum
+    url: "${HEC_URL}"          # the Listener "Address" shown in the Onum console
+    token: "${HEC_TOKEN}"
+    queue: { dir: /var/lib/flowtrim/queue }
+telemetry: { listen: "0.0.0.0:9109" }

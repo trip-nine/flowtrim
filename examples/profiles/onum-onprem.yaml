@@ -1,0 +1,27 @@
+# Layout A (recommended when the customer runs Onum):
+#   exporters ──UDP──► FlowTrim ──HEC/HTTPS──► Onum Splunk-HEC Listener ──► Onum pipeline ──► NG-SIEM Data Sink
+# FlowTrim does the flow-aware work (decode, dedup, drop, rollup, summaries).
+# Onum does routing, enrichment, masking and delivery to NG-SIEM.
+mode: shadow
+inputs:
+  netflow:
+    listen: ["0.0.0.0:2055", "0.0.0.0:4739"]
+    allowed_exporters: ["192.0.2.0/24"]          # your routers
+rules:
+  bypass:
+    - { name: threat_intel, match: { any_ip_in_list: /etc/flowtrim/intel.txt } }
+    - { name: denied_traffic, match: { action: [REJECT, DENY] } }
+    - { name: lateral_movement_ports, match: { direction: [internal], dst_port: ["22", "135", "139", "445", "3389", "5985-5986"] } }
+  drop:
+    - { name: multicast_broadcast, match: { dst_cidr: ["224.0.0.0/4", "255.255.255.255/32", "ff00::/8"] } }
+  dedup:  { enabled: true }
+  rollup: { enabled: true, window: 60s, match: { direction: [internal, outbound] } }
+  fanout: { enabled: true }
+output:
+  hec:
+    target: onum                                  # Splunk auth + /services/collector/event (verify in your Onum version)
+    url: "https://onum-distributor.corp.example:8088"
+    token: "${HEC_TOKEN}"                          # token configured on the Onum Listener
+    tls: { ca_file: /etc/flowtrim/onum-ca.pem }   # Onum On-Prem can use your own CA
+    queue: { dir: /var/lib/flowtrim/queue, max_bytes: 10GiB }
+telemetry: { listen: "0.0.0.0:9109" }

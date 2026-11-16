@@ -1,0 +1,21 @@
+# Layout C: no Onum. FlowTrim reduces and sends straight to the
+# Falcon NG-SIEM HEC/HTTP Event Data Connector. Good for POCs, or for customers without Onum.
+mode: shadow
+inputs:
+  netflow: { listen: ["0.0.0.0:2055", "0.0.0.0:4739"] }
+rules:
+  bypass:
+    - { name: denied_traffic, match: { action: [REJECT, DENY] } }
+    - { name: lateral_movement_ports, match: { direction: [internal], dst_port: ["22", "135", "139", "445", "3389", "5985-5986"] } }
+  drop:
+    - { name: multicast_broadcast, match: { dst_cidr: ["224.0.0.0/4", "255.255.255.255/32", "ff00::/8"] } }
+  dedup:  { enabled: true }
+  rollup: { enabled: true, window: 60s, match: { direction: [internal, outbound] } }
+  fanout: { enabled: true }
+output:
+  hec:
+    target: ngsiem
+    url: "${HEC_URL}"          # https://<id>.ingest.<region>.crowdstrike.com[/services/collector]
+    token: "${HEC_TOKEN}"
+    queue: { dir: /var/lib/flowtrim/queue }
+telemetry: { listen: "0.0.0.0:9109" }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/tripnine/flowtrim/internal/app"
 	"github.com/tripnine/flowtrim/internal/config"
+	"github.com/tripnine/flowtrim/internal/output"
 	"github.com/tripnine/flowtrim/internal/rules"
 )
 
@@ -112,12 +113,13 @@ func check(path string) int {
 	fmt.Printf("  rollup             %v (key=%v, window=%s)\n", r.Rollup.Enabled, r.Rollup.Key, r.Rollup.Window.D())
 	fmt.Printf("  fanout summaries   %v\n", r.Fanout.Enabled)
 	fmt.Printf("  drop summaries     %v\n", *r.DropSummary.Enabled)
-	if o := cfg.Output.NGSIEM; o != nil {
+	if o := cfg.Output.HEC; o != nil {
 		q := "memory"
 		if o.Queue.Dir != "" {
 			q = o.Queue.Dir
 		}
-		fmt.Printf("  output ngsiem      %s (gzip=%v, queue=%s)\n", redact(o.URL), *o.Gzip, q)
+		u, _ := output.NormalizeURLPath(o.URL, o.Path)
+		fmt.Printf("  output hec         target=%s %s (auth=%s, gzip=%v, queue=%s)\n", o.Target, redact(u), o.AuthScheme, *o.Gzip, q)
 	}
 	if cfg.Mode == config.ModeEnforce {
 		fmt.Println("\n  WARNING: enforce mode drops and aggregates data. Run in shadow mode first and review /shadow.")

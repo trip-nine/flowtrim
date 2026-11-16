@@ -35,7 +35,8 @@ inputs ──► normalize ──► engine (single goroutine) ──► encoder
 | **v0.1 MVP** | NetFlow v5/v9/IPFIX, sFlow, AWS VPC via Firehose. Dedup/bypass/drop/rollup/fanout/drop-summary. Shadow mode. NG-SIEM HEC output with gzip, batching, retry, 413 split, disk queue. Prometheus. SIGHUP rule reload. Docker, systemd. | **Built and tested locally** |
 | v0.2 | Live-tenant validation (register items U1–U6). Helm chart (StatefulSet + PVC). Signed releases + SBOM (goreleaser, cosign). CI license scan. | Next |
 | v0.3 | Azure VNet flow logs (Blob + Event Grid), GCP VPC (Pub/Sub). S3+SQS pull for AWS. | Planned |
-| v0.4 | "First-seen destination" bypass (rare dst passes raw). ASN/GeoIP enrichment (license-checked free DBs). SNMP ifName cache. | Planned |
+| v0.2.x | `output.hec` with `ngsiem`/`onum`/`generic` presets, gzip probe, deployment profiles, user/setup/config docs | **Done** |
+| v0.4 | "First-seen destination" bypass (rare dst passes raw). Optional ASN/GeoIP enrichment (license-checked free DBs) for customers without Onum. SNMP ifName cache. | Planned |
 | v1.0 | Multi-replica guidance with exporter affinity. CEL expressions in matchers. Per-rule rate limits. Zeek `conn.log` input. Hardening review. | Planned |
 
 ## 4. Risks and Unknowns Register
@@ -55,6 +56,17 @@ Status: **Open** = needs evidence; **Mitigated** = the design handles it, but it
 | U7 | Regions and GovCloud URLs (`us-1`, `us-2`, `eu-1`, `us-gov-1`, `us-gov-2`) | Correct endpoint | The URL comes verbatim from the connector page | Mitigated |
 | U8 | **Duplicates after a timeout** (request accepted but the response was lost) | HEC has no idempotency key, so a retry can duplicate a batch | Accepted as at-least-once. Duplicates are rare and limited to whole batches. | Accepted |
 | U9 | API key rotation | Outage if the key expires or is revoked | `401`/`403` keeps data queued (never drops) and logs loudly. Rotate by updating the environment and restarting. | Mitigated |
+
+### 4a-2. Onum in the path (Layout A)
+
+| ID | Unknown | Why it matters | Current handling | Status |
+|---|---|---|---|---|
+| O1 | Which Onum Listener fits (Splunk HEC, HTTP, HTTP Standard Inbound), and its auth header and path | Output correctness | `target: onum` preset = `Splunk` auth on `/services/collector/event`. Override with `auth_scheme`/`path`. | Open |
+| O2 | Does the Onum Listener accept gzip and batched HEC bodies? What is its size limit? | Throughput | The gzip probe falls back safely. 413 splits. | Open |
+| O3 | Does the Onum pipeline re-wrap FlowTrim's event before the NG-SIEM Data Sink? | Double-nested JSON, wrong parser fields | Setup guide: forward the body unchanged. Verify in the lab. | Open |
+| O4 | Is the flow-end timestamp kept end to end? | `@timestamp` accuracy | HEC `time` = flow end. Check that the Onum sink passes it through. | Open |
+| O5 | Does Onum bill by volume? | Savings case | Reducing before Onum saves at both hops if it does | Open |
+| O6 | Where FlowTrim runs relative to Onum Distributors | Latency, failure domains | One per site, next to the Distributor, with exporter affinity | Mitigated |
 
 ### 4b. Flow semantics
 

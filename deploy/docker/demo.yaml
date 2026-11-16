@@ -15,9 +15,9 @@ rules:
   fanout: { enabled: true, window: 10s }
   drop_summary: { interval: 10s }
 output:
-  ngsiem:
-    url: "${NGSIEM_URL}"
-    token: "${NGSIEM_TOKEN}"
+  hec:
+    url: "${HEC_URL}"
+    token: "${HEC_TOKEN}"
     queue: { dir: /var/lib/flowtrim/queue }
 telemetry:
   listen: "0.0.0.0:9109"

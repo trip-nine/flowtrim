@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=simple
 User=flowtrim
 Group=flowtrim
-# NGSIEM_URL=... and NGSIEM_TOKEN=... (chmod 600, owned by root)
+# HEC_URL=... and HEC_TOKEN=... (chmod 600, owned by root)
 EnvironmentFile=/etc/flowtrim/flowtrim.env
 ExecStartPre=/usr/local/bin/flowtrim check -config /etc/flowtrim/flowtrim.yaml
 ExecStart=/usr/local/bin/flowtrim run -config /etc/flowtrim/flowtrim.yaml

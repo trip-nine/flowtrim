@@ -10,8 +10,8 @@ services:
   flowtrim:
     build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
     environment:
-      NGSIEM_URL: http://mockhec:8088
-      NGSIEM_TOKEN: demo-token
+      HEC_URL: http://mockhec:8088
+      HEC_TOKEN: demo-token
     command: ["run", "-config", "/etc/flowtrim/demo.yaml"]
     volumes:
       - ./demo.yaml:/etc/flowtrim/demo.yaml:ro

@@ -7,8 +7,8 @@ import (
 )
 
 func TestExampleConfigParses(t *testing.T) {
-	t.Setenv("NGSIEM_URL", "https://x.ingest.us-1.crowdstrike.com")
-	t.Setenv("NGSIEM_TOKEN", "t")
+	t.Setenv("HEC_URL", "https://x.ingest.us-1.crowdstrike.com")
+	t.Setenv("HEC_TOKEN", "t")
 	b, err := os.ReadFile("../../examples/flowtrim.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -53,5 +53,20 @@ func TestParseBytes(t *testing.T) {
 	}
 	if _, err := ParseBytes("lots"); err == nil || !strings.Contains(err.Error(), "invalid") {
 		t.Error("should reject")
+	}
+}
+
+func TestTargetsAndLegacyAlias(t *testing.T) {
+	base := "inputs: {netflow: {listen: ['0.0.0.0:2055']}}\n"
+	c, err := Parse([]byte(base + "output: {ngsiem: {url: 'https://x', token: t}}\n"))
+	if err != nil || c.Output.HEC == nil || c.Output.HEC.Target != TargetNGSIEM || c.Output.HEC.Path != "/services/collector" || c.Output.HEC.AuthScheme != "Bearer" {
+		t.Fatalf("legacy alias: %v %+v", err, c)
+	}
+	c, err = Parse([]byte(base + "output: {hec: {target: onum, url: 'https://onum-distributor:8088', token: t}}\n"))
+	if err != nil || c.Output.HEC.AuthScheme != "Splunk" || c.Output.HEC.Path != "/services/collector/event" {
+		t.Fatalf("onum preset: %v %+v", err, c.Output.HEC)
+	}
+	if _, err := Parse([]byte(base + "output: {hec: {target: kafka, url: 'https://x', token: t}}\n")); err == nil {
+		t.Fatal("bad target should fail")
 	}
 }

@@ -117,7 +117,7 @@ func (a *App) Run(ctx context.Context) error {
 	if a.cfg.Output.Stdout && a.Stdout == nil {
 		a.Stdout = os.Stdout
 	}
-	a.out, err = output.New(a.cfg.Output.NGSIEM, a.log.With("component", "output"), a.shadow, a.Stdout)
+	a.out, err = output.New(a.cfg.Output.HEC, a.log.With("component", "output"), a.shadow, a.Stdout)
 	if err != nil {
 		return err
 	}

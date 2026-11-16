@@ -1,5 +1,5 @@
 // Command mockhec is a local stand-in for the Falcon NG-SIEM HEC endpoint.
-// It checks the bearer token, accepts gzip, counts events and can inject
+// It checks the token (Bearer or Splunk scheme), accepts gzip, counts events and can inject
 // failures (503, 413) so you can test FlowTrim's retry/split/queue behavior
 // without a tenant. It is NOT a faithful reproduction of NG-SIEM limits.
 package main
@@ -51,7 +51,7 @@ func main() {
 		outF = f
 	}
 
-	http.HandleFunc("/services/collector", func(w http.ResponseWriter, r *http.Request) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		reqs.Add(1)
 		reject := func(code int, why string) {
 			mu.Lock()
@@ -59,7 +59,7 @@ func main() {
 			mu.Unlock()
 			http.Error(w, fmt.Sprintf(`{"text":%q,"code":%d}`, why, code), code)
 		}
-		if r.Header.Get("Authorization") != "Bearer "+*token {
+		if a := r.Header.Get("Authorization"); a != "Bearer "+*token && a != "Splunk "+*token {
 			reject(401, "invalid token")
 			return
 		}
@@ -132,7 +132,10 @@ func main() {
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"text":"Success","code":0}`))
-	})
+	}
+	// NG-SIEM style and Splunk/Onum-HEC style paths
+	http.HandleFunc("/services/collector", handler)
+	http.HandleFunc("/services/collector/event", handler)
 	http.HandleFunc("/stats", func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -141,6 +144,6 @@ func main() {
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(st)
 	})
-	log.Printf("mockhec listening on http://%s/services/collector (token=%q)", *addr, *token)
+	log.Printf("mockhec listening on http://%s/services/collector[/event] (Bearer or Splunk token=%q)", *addr, *token)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }

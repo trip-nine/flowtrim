@@ -1,0 +1,19 @@
+# Collector-only: FlowTrim decodes and normalizes, and Onum does ALL reduction.
+# Use this when the customer insists every policy lives in Onum. You lose
+# cross-router dedup, beaconing-preserving rollups and fanout summaries,
+# and full volume crosses the network to Onum.
+mode: enforce               # nothing is reduced, so enforce = forward everything
+inputs:
+  netflow: { listen: ["0.0.0.0:2055", "0.0.0.0:4739"] }
+rules:
+  dedup:  { enabled: false }
+  rollup: { enabled: false }
+  fanout: { enabled: false }
+  drop_summary: { enabled: false }
+output:
+  hec:
+    target: onum
+    url: "${HEC_URL}"
+    token: "${HEC_TOKEN}"
+    queue: { dir: /var/lib/flowtrim/queue }
+telemetry: { listen: "0.0.0.0:9109" }

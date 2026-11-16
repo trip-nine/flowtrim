@@ -33,13 +33,13 @@ func TestNormalizeURL(t *testing.T) {
 }
 
 func TestClassify(t *testing.T) {
-	cases := map[int]outcome{200: okSent, 204: okSent, 413: split, 401: authErr, 403: authErr, 429: retry, 503: retry, 500: retry, 408: retry, 400: dead, 404: dead}
+	cases := map[int]outcome{200: okSent, 204: okSent, 413: split, 401: authErr, 403: authErr, 429: retry, 503: retry, 500: retry, 408: retry, 400: noGzip, 404: dead}
 	for c, want := range cases {
 		if got := classify(c, true); got != want {
 			t.Errorf("%d: got %v want %v", c, got, want)
 		}
 	}
-	if classify(415, true) != noGzip || classify(415, false) != dead {
+	if classify(415, true) != noGzip || classify(415, false) != dead || classify(400, false) != dead {
 		t.Error("415 handling")
 	}
 }
@@ -51,6 +51,7 @@ type fakeHEC struct {
 	fail     atomic.Int32 // number of 503s to return first
 	maxBody  int
 	auth     string
+	noGzip   bool // answer 400 to gzip bodies, like a receiver that can't decompress
 	statuses []int
 }
 
@@ -69,6 +70,11 @@ func (f *fakeHEC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
+	if f.noGzip && r.Header.Get("Content-Encoding") == "gzip" {
+		f.statuses = append(f.statuses, 400)
+		w.WriteHeader(400)
+		return
+	}
 	if r.Header.Get("Content-Encoding") == "gzip" {
 		f.gz++
 		zr, err := gzip.NewReader(bytes.NewReader(body))
@@ -97,12 +103,12 @@ func (f *fakeHEC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"text":"Success","code":0}`))
 }
 
-func cfgFor(url, dir string) *config.NGSIEM {
+func cfgFor(url, dir string) *config.HEC {
 	y := `
 mode: enforce
 inputs: { netflow: { listen: ["127.0.0.1:0"] } }
 output:
-  ngsiem:
+  hec:
     url: ` + url + `
     token: secret
     batch: { max_events: 50, max_wait: 50ms }
@@ -113,7 +119,7 @@ output:
 	if err != nil {
 		panic(err)
 	}
-	return c.Output.NGSIEM
+	return c.Output.HEC
 }
 
 func ev(i int) ocsf.Event {
@@ -184,4 +190,33 @@ func TestAuthErrorHoldsData(t *testing.T) {
 	o2.Start()
 	waitFor(t, func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.events == 10 })
 	o2.Close(time.Second)
+}
+
+func TestGzipProbeFallsBackOnly(t *testing.T) {
+	f := &fakeHEC{auth: "Bearer secret", noGzip: true}
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	o, _ := New(cfgFor(srv.URL, t.TempDir()), slog.New(slog.NewTextHandler(io.Discard, nil)), telemetry.NewShadow(), nil)
+	o.Start()
+	for i := 0; i < 120; i++ {
+		o.Send(ev(i))
+	}
+	waitFor(t, func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.events == 120 })
+	o.Close(time.Second)
+	if o.gzipOn.Load() {
+		t.Fatal("gzip should be disabled after a successful uncompressed probe")
+	}
+}
+
+func TestBadBatchIsDeadLetteredNotGzipBlamed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(400) }))
+	defer srv.Close()
+	o, _ := New(cfgFor(srv.URL, t.TempDir()), slog.New(slog.NewTextHandler(io.Discard, nil)), telemetry.NewShadow(), nil)
+	o.Start()
+	o.Send(ev(1))
+	waitFor(t, func() bool { n, _ := o.q.Len(); return n == 0 })
+	o.Close(100 * time.Millisecond)
+	if !o.gzipOn.Load() {
+		t.Fatal("a batch the receiver rejects either way must not switch gzip off")
+	}
 }

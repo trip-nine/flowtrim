@@ -163,15 +163,27 @@ type DropSummary struct {
 
 // Output configures forwarding.
 type Output struct {
-	NGSIEM *NGSIEM `yaml:"ngsiem"`
-	Stdout bool    `yaml:"stdout"`
+	HEC    *HEC `yaml:"hec"`
+	Stdout bool `yaml:"stdout"`
+	// Deprecated alias for output.hec with target: ngsiem (v0.1.0 configs).
+	LegacyNGSIEM *HEC `yaml:"ngsiem"`
 }
 
-// NGSIEM is the Falcon Next-Gen SIEM HEC/HTTP Event Data Connector output.
-type NGSIEM struct {
-	URL         string   `yaml:"url"`   // API URL from the data connector (with or without /services/collector)
-	Token       string   `yaml:"token"` // API key from the data connector
+// HEC targets.
+const (
+	TargetNGSIEM  = "ngsiem"  // Falcon Next-Gen SIEM HEC/HTTP Event Data Connector
+	TargetOnum    = "onum"    // Falcon Onum Splunk-HEC-compatible Listener
+	TargetGeneric = "generic" // any HEC-compatible receiver; URL must include the path
+)
+
+// HEC is an HTTP Event Collector output: Falcon NG-SIEM directly, or an
+// Onum HEC Listener that forwards to NG-SIEM.
+type HEC struct {
+	Target      string   `yaml:"target"` // ngsiem | onum | generic
+	URL         string   `yaml:"url"`    // endpoint; the target's default path is appended when the URL has none
+	Token       string   `yaml:"token"`  // API key / HEC token
 	AuthScheme  string   `yaml:"auth_scheme"`
+	Path        string   `yaml:"path"` // override the target's default path
 	Gzip        *bool    `yaml:"gzip"`
 	Timeout     Duration `yaml:"timeout"`
 	Concurrency int      `yaml:"concurrency"`
@@ -349,9 +361,26 @@ func (c *Config) applyDefaults() {
 	if c.Rules.DropSummary.Interval == 0 {
 		c.Rules.DropSummary.Interval = Duration(60 * time.Second)
 	}
-	if o := c.Output.NGSIEM; o != nil {
+	if c.Output.HEC == nil && c.Output.LegacyNGSIEM != nil {
+		c.Output.HEC = c.Output.LegacyNGSIEM
+		if c.Output.HEC.Target == "" {
+			c.Output.HEC.Target = TargetNGSIEM
+		}
+	}
+	if o := c.Output.HEC; o != nil {
+		if o.Target == "" {
+			o.Target = TargetNGSIEM
+		}
+		preset := map[string][2]string{ // auth scheme, default path
+			TargetNGSIEM:  {"Bearer", "/services/collector"},
+			TargetOnum:    {"Splunk", "/services/collector/event"},
+			TargetGeneric: {"Bearer", ""},
+		}[o.Target]
 		if o.AuthScheme == "" {
-			o.AuthScheme = "Bearer"
+			o.AuthScheme = preset[0]
+		}
+		if o.Path == "" {
+			o.Path = preset[1]
 		}
 		if o.Gzip == nil {
 			o.Gzip = boolp(true)
@@ -470,23 +499,31 @@ func (c *Config) Validate() error {
 			}
 		}
 	}
-	if c.Output.NGSIEM == nil && !c.Output.Stdout {
-		add("an output is required (output.ngsiem or output.stdout: true)")
+	if c.Output.HEC != nil && c.Output.LegacyNGSIEM != nil && c.Output.HEC != c.Output.LegacyNGSIEM {
+		add("use output.hec or the older output.ngsiem, not both")
 	}
-	if o := c.Output.NGSIEM; o != nil {
+	if c.Output.HEC == nil && !c.Output.Stdout {
+		add("an output is required (output.hec or output.stdout: true)")
+	}
+	if o := c.Output.HEC; o != nil {
+		switch o.Target {
+		case TargetNGSIEM, TargetOnum, TargetGeneric:
+		default:
+			add("output.hec.target must be ngsiem, onum or generic, got %q", o.Target)
+		}
 		if o.URL == "" {
-			add("output.ngsiem.url is required (the API URL shown on the HEC/HTTP Event Data Connector)")
+			add("output.hec.url is required (NG-SIEM: the connector's API URL; Onum: the Listener address)")
 		} else if !strings.HasPrefix(o.URL, "https://") && !strings.HasPrefix(o.URL, "http://") {
-			add("output.ngsiem.url must start with https://")
+			add("output.hec.url must start with https://")
 		}
 		if o.Token == "" {
-			add("output.ngsiem.token is required (set it via ${NGSIEM_TOKEN})")
+			add("output.hec.token is required (set it via ${HEC_TOKEN})")
 		}
 		if o.Queue.Overflow != "drop_oldest" && o.Queue.Overflow != "block" {
-			add("output.ngsiem.queue.overflow must be drop_oldest or block")
+			add("output.hec.queue.overflow must be drop_oldest or block")
 		}
 		if o.Batch.MaxEvents > 100000 {
-			add("output.ngsiem.batch.max_events too large (max 100000)")
+			add("output.hec.batch.max_events too large (max 100000)")
 		}
 	}
 	if len(errs) > 0 {
