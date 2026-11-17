@@ -1,21 +1,31 @@
 FlowTrim
-Copyright 2026 The FlowTrim Authors
+Copyright (c) 2026 Trip Nine and the FlowTrim contributors
+Licensed under the MIT License (see LICENSE).
 
-Licensed under the Apache License, Version 2.0 (see LICENSE).
+FlowTrim links the following third-party software, each under its own license:
 
-This product links the following third-party software:
+  goflow2 (github.com/netsampler/goflow2/v2)            BSD-3-Clause   Copyright (c) 2021, NetSampler
+  Prometheus Go client (github.com/prometheus/*)         Apache-2.0
+  gosnmp (github.com/gosnmp/gosnmp)                      BSD-2-Clause
+  maxminddb-golang (github.com/oschwald/maxminddb-golang) ISC
+  go-yaml v3 (gopkg.in/yaml.v3)                          MIT and Apache-2.0
+  go.yaml.in/yaml/v2                                     Apache-2.0
+  golang.org/x/sys                                       BSD-3-Clause
+  google.golang.org/protobuf                             BSD-3-Clause
+  github.com/libp2p/go-reuseport                         ISC
+  github.com/cespare/xxhash/v2                           MIT
+  github.com/beorn7/perks                                MIT
+  github.com/munnerz/goautoneg                           BSD-3-Clause
 
-  goflow2 (github.com/netsampler/goflow2/v2)          BSD-3-Clause  Copyright (c) 2021, NetSampler
-  Prometheus Go client (github.com/prometheus/*)       Apache-2.0
-  go-yaml v3 (gopkg.in/yaml.v3)                        MIT and Apache-2.0
-  go.yaml.in/yaml/v2                                   Apache-2.0
-  golang.org/x/sys                                     BSD-3-Clause
-  google.golang.org/protobuf                           BSD-3-Clause
-  github.com/libp2p/go-reuseport                       ISC
-  github.com/cespare/xxhash/v2                         MIT
-  github.com/beorn7/perks                              MIT
-  github.com/munnerz/goautoneg                         BSD-3-Clause
+Build and test tooling only (not linked into the flowtrim binary):
+  mmdbwriter (github.com/maxmind/mmdbwriter)             Apache-2.0   (tools/mkdemodb, tests)
+  golang.org/x/net/dns/dnsmessage                        BSD-3-Clause (tests)
 
-"CrowdStrike", "Falcon" and "Falcon Next-Gen SIEM" are trademarks of
-CrowdStrike, Inc. They are used only to describe interoperability. This
-project contains no code, schema or field definitions from ElastiFlow.
+No GeoIP, ASN or threat-intelligence databases are distributed. The demo
+MMDB files cover only documentation and demo address ranges.
+
+"CrowdStrike", "Falcon", "Falcon Onum" and "Falcon Next-Gen SIEM" are
+trademarks of CrowdStrike, Inc. "ElastiFlow" is a trademark of ElastiFlow Inc.
+They are used only to describe interoperability and comparison. FlowTrim is an
+independent project, not affiliated with or endorsed by either company, and
+contains no code, schema or field definitions from ElastiFlow.

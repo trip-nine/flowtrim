@@ -67,6 +67,9 @@ var (
 	ShadowReducedBytes = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "flowtrim_shadow_reduced_bytes_total", Help: "Shadow mode: uncompressed bytes enforce mode would have sent.",
 	})
+	EnrichLookups = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "flowtrim_enrich_lookups_total", Help: "Enrichment lookups by kind (geoip, dns, snmp, threat) and result.",
+	}, []string{"kind", "result"})
 	ConfigReloads = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "flowtrim_config_reloads_total", Help: "Rule reloads via SIGHUP.",
 	}, []string{"result"})

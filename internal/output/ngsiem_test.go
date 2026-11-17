@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/ocsf"
-	"github.com/tripnine/flowtrim/internal/telemetry"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/ocsf"
+	"github.com/trip-nine/flowtrim/internal/telemetry"
 )
 
 func TestNormalizeURL(t *testing.T) {

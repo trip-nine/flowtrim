@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlowTrim Console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%236d5efc'/%3E%3Cpath d='M5 8h14M8 12h8M11 16h2' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f5f7fb; --panel:#ffffff; --panel2:#f9fafc; --line:#e3e7ef; --fg:#141a2b; --muted:#66708a; --soft:#9aa3b8;
+  --side:#0f1629; --side2:#18213a; --sidefg:#c9d1e6; --sidemuted:#7f8aa8;
+  --accent:#4f5bd5; --accent2:#7c4dff; --teal:#0ea5a4; --green:#16a34a; --amber:#d97706; --red:#dc2626; --sky:#0284c7;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 12px rgba(16,24,40,.05); --r:14px;
+}
+[data-theme=dark]{
+  --bg:#0b1020; --panel:#121a2e; --panel2:#0f1628; --line:#23304d; --fg:#e8ecf7; --muted:#9aa6c4; --soft:#6b7799;
+  --side:#070b17; --side2:#111a30; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+aside{background:var(--side);color:var(--sidefg);padding:18px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
+.brand b{font-size:17px;letter-spacing:.2px;color:#fff}
+.brand small{display:block;color:var(--sidemuted);font-size:11px;margin-top:-2px}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6d5efc,#14b8a6);display:grid;place-items:center;box-shadow:0 6px 16px rgba(109,94,252,.35)}
+nav a{display:flex;align-items:center;gap:10px;color:var(--sidefg);text-decoration:none;padding:9px 10px;border-radius:9px;font-size:13.5px}
+nav a:hover{background:var(--side2)}
+nav a.on{background:linear-gradient(90deg,rgba(109,94,252,.28),rgba(109,94,252,.06));color:#fff}
+nav a svg{width:17px;height:17px;opacity:.85;flex:none}
+.sidefoot{margin-top:auto;font-size:11.5px;color:var(--sidemuted);padding:8px}
+.sidefoot code{color:#c9d1e6;background:var(--side2);padding:1px 5px;border-radius:5px}
+main{min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding:14px 26px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+.top h1{font-size:17px;margin:0;font-weight:650}
+.crumb{color:var(--muted);font-size:12.5px}
+.sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);white-space:nowrap}
+.pill.shadow{color:#7c3aed;border-color:#ddd6fe;background:#f5f3ff}
+.pill.enforce{color:#047857;border-color:#a7f3d0;background:#ecfdf5}
+.pill.sim{color:#b45309;border-color:#fde68a;background:#fffbeb}
+[data-theme=dark] .pill.shadow{background:#241a45;border-color:#4c3a8f;color:#c4b5fd}
+[data-theme=dark] .pill.enforce{background:#0f2e25;border-color:#1f6b52;color:#6ee7b7}
+[data-theme=dark] .pill.sim{background:#33260b;border-color:#7a5a12;color:#fcd34d}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(22,163,74,.18);animation:pulse 2s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(22,163,74,0)}}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:7px 12px;border-radius:9px;font-size:12.5px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.wrap{padding:22px 26px 60px;max-width:1500px}
+.grid{display:grid;gap:16px}
+.kpis{grid-template-columns:repeat(6,minmax(0,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;min-width:0}
+.card h3{margin:0 0 10px;font-size:13px;font-weight:650;color:var(--fg);display:flex;align-items:center;gap:8px}
+.card h3 small{color:var(--muted);font-weight:500}
+.kpi .lab{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+.kpi .v{font-size:26px;font-weight:700;letter-spacing:-.5px;margin:4px 0 2px}
+.kpi .sub{font-size:12px;color:var(--muted)}
+.up{color:var(--green)} .down{color:var(--red)}
+.spark{width:100%;height:34px;display:block;margin-top:6px}
+.two{grid-template-columns:2fr 1fr}
+.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.half{grid-template-columns:1fr 1fr}
+.pipe{width:100%;height:auto;display:block}
+.pipe text{font-family:inherit}
+.flowline{fill:none;stroke-linecap:round}
+.anim{stroke-dasharray:2 14;animation:dash linear infinite}
+@keyframes dash{to{stroke-dashoffset:-160}}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;background:var(--panel2)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:7px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%;border-radius:6px}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px}
+.t-bypass{background:#e0f2fe;color:#0369a1}.t-drop{background:#fee2e2;color:#b91c1c}.t-dedup{background:#ede9fe;color:#6d28d9}
+.t-rollup{background:#dcfce7;color:#15803d}.t-raw{background:#f1f5f9;color:#475569}.t-sum{background:#fef3c7;color:#92400e}
+[data-theme=dark] .t-bypass{background:#0c2a3d;color:#7dd3fc}[data-theme=dark] .t-drop{background:#3b1416;color:#fca5a5}[data-theme=dark] .t-dedup{background:#2a1e4f;color:#c4b5fd}
+[data-theme=dark] .t-rollup{background:#0f2e1d;color:#86efac}[data-theme=dark] .t-raw{background:#1e293b;color:#cbd5e1}[data-theme=dark] .t-sum{background:#3a2a0b;color:#fcd34d}
+pre.json{margin:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto;max-height:520px;white-space:pre}
+.k{color:#7c3aed}.s{color:#0f766e}.num{color:#c2410c}.b{color:#2563eb}
+[data-theme=dark] .k{color:#c4b5fd}[data-theme=dark] .s{color:#5eead4}[data-theme=dark] .num{color:#fdba74}[data-theme=dark] .b{color:#93c5fd}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.status-ok{color:var(--green);font-weight:600}.status-bad{color:var(--red);font-weight:600}.status-warn{color:var(--amber);font-weight:600}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.step{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel2);cursor:pointer;transition:.15s}
+.step:hover,.step.on{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,91,213,.12);background:var(--panel)}
+.step .no{font-size:11px;color:var(--accent);font-weight:700;letter-spacing:.5px}
+.step b{display:block;margin:2px 0 2px;font-size:13.5px}
+.step span{font-size:12px;color:var(--muted)}
+label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+input[type=number],select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--fg);font:inherit}
+input[type=range]{width:100%}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+.big{font-size:22px;font-weight:700;letter-spacing:-.3px}
+.muted{color:var(--muted)} .small{font-size:12px}
+.note{font-size:12px;color:var(--muted);border-left:3px solid var(--accent);padding:6px 10px;background:var(--panel2);border-radius:0 8px 8px 0}
+.banner{margin:0 0 16px;padding:10px 14px;border-radius:12px;border:1px solid #fde68a;background:#fffbeb;color:#92400e;font-size:13px}
+[data-theme=dark] .banner{background:#2b2109;border-color:#7a5a12;color:#fcd34d}
+.hide{display:none}
+.menu{display:none}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}.two,.three{grid-template-columns:1fr}.steps{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){
+  .app{grid-template-columns:1fr}
+  aside{position:fixed;inset:0 30% 0 0;z-index:20;transform:translateX(-100%);transition:.2s;height:100%}
+  aside.open{transform:none}
+  .menu{display:inline-block}
+  .kpis{grid-template-columns:repeat(2,1fr)}.half{grid-template-columns:1fr}.steps{grid-template-columns:1fr}
+  .wrap{padding:16px 14px 60px}.top{padding:12px 14px}.crumb{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside id="side">
+  <div class="brand">
+    <div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg></div>
+    <div><b>FlowTrim</b><small>Flow reduction console</small></div>
+  </div>
+  <nav id="nav"></nav>
+  <div class="sidefoot" id="sidefoot"></div>
+</aside>
+<main>
+  <div class="top">
+    <button class="btn menu" onclick="document.getElementById('side').classList.toggle('open')">☰</button>
+    <div><h1 id="title">Overview</h1><div class="crumb" id="crumb"></div></div>
+    <div class="sp"></div>
+    <span class="pill" id="live"><span class="dot"></span>Live</span>
+    <span class="pill" id="mode">—</span>
+    <button class="btn" id="theme" title="Toggle theme">◐</button>
+  </div>
+  <div class="wrap" id="view"></div>
+</main>
+</div>
+<script>
+"use strict";
+// ---------------------------------------------------------------- utilities
+const $ = s => document.querySelector(s);
+const fmt = (n, d=0) => n==null||isNaN(n) ? "—" : Math.abs(n)>=1e9 ? (n/1e9).toFixed(1)+"B" : Math.abs(n)>=1e6 ? (n/1e6).toFixed(1)+"M" : Math.abs(n)>=1e4 ? (n/1e3).toFixed(1)+"k" : Number(n).toFixed(d);
+const bytes = n => n==null||isNaN(n) ? "—" : n>=1e12 ? (n/1e12).toFixed(2)+" TB" : n>=1e9 ? (n/1e9).toFixed(2)+" GB" : n>=1e6 ? (n/1e6).toFixed(1)+" MB" : n>=1e3 ? (n/1e3).toFixed(1)+" KB" : Math.round(n)+" B";
+const pct = (a,b) => b>0 ? Math.max(0,100*(1-a/b)) : 0;
+const sum = o => Object.values(o||{}).reduce((a,b)=>a+(typeof b==="object"?sum(b):b),0);
+const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function hl(obj){ // JSON syntax highlight
+  return esc(JSON.stringify(obj,null,2)).replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m=>{
+    let c="num"; if(/^"/.test(m)) c=/:$/.test(m)?"k":"s"; else if(/true|false|null/.test(m)) c="b"; return `<span class="${c}">${m}</span>`;});
+}
+function spark(vals, color){
+  const w=200,h=34,max=Math.max(1,...vals),n=vals.length;
+  if(n<2) return `<svg class="spark" viewBox="0 0 ${w} ${h}"></svg>`;
+  const pts=vals.map((v,i)=>[i*(w/(n-1)), h-3-(v/max)*(h-6)]);
+  const d=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${d} L${w} ${h} L0 ${h}Z" fill="${color}" opacity=".12"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2"/></svg>`;
+}
+const icons = {
+  overview:'<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 9h8V3h-8z"/>',
+  walkthrough:'<path d="M4 12h4l3 7 4-14 3 7h2"/>',
+  pipeline:'<path d="M3 6h6M15 6h6M9 6a3 3 0 0 0 6 0M3 18h6M15 18h6M9 18a3 3 0 0 0 6 0M12 9v6"/>',
+  rules:'<path d="M4 6h16M4 12h10M4 18h6"/><circle cx="18" cy="16" r="3"/>',
+  enrichment:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  delivery:'<path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="1.5"/><circle cx="17" cy="18" r="1.5"/>',
+  records:'<path d="M8 4H5v16h3M16 4h3v16h-3M10 9l-2 3 2 3M14 9l2 3-2 3"/>',
+  sizing:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+};
+const PAGES = [
+  ["overview","Overview"],["walkthrough","End-to-end walkthrough"],["pipeline","Pipeline"],["rules","Rules & reduction"],
+  ["enrichment","Enrichment"],["delivery","Delivery"],["records","Records"],["sizing","Sizing calculator"]];
+$("#nav").innerHTML = PAGES.map(([id,t])=>`<a href="#${id}" data-p="${id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icons[id]}</svg>${t}</a>`).join("");
+
+// theme
+try{ const t=localStorage.getItem("ft-theme"); if(t) document.documentElement.dataset.theme=t; else if(matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme="dark"; }catch(e){}
+$("#theme").onclick=()=>{const d=document.documentElement; d.dataset.theme=d.dataset.theme==="dark"?"light":"dark"; try{localStorage.setItem("ft-theme",d.dataset.theme)}catch(e){} render(true);};
+
+// ---------------------------------------------------------------- data layer
+const S = { live:false, sim:false, st:null, hist:[], ds:[], recs:null, last:0 };
+const forceSim = /[?&]sim=1/.test(location.search) || location.protocol==="file:" || /claude\.ai|claudeusercontent/.test(location.host);
+
+async function getJSON(u){ const r=await fetch(u,{cache:"no-store"}); if(!r.ok) throw new Error(r.status); return r.json(); }
+
+async function poll(){
+  try{
+    if(forceSim) throw new Error("sim");
+    const st = await getJSON("api/status");
+    S.st=st; S.live=true; S.sim=false;
+    if(st.downstream && st.downstream.length) S.ds = await getJSON("api/downstream").catch(()=>[]);
+  }catch(e){ S.sim=true; S.live=false; S.st=Sim.step(); S.ds=Sim.downstream(); }
+  push(S.st); render(false);
+}
+function totals(st){
+  const c=st.counters, dec=c.decisions||{};
+  const r={ t:new Date(st.now).getTime(), in:sum(c.received), out:c.out_events, emitted:sum(c.emitted),
+    dedup:sum(dec.dedup), drop:sum(dec.drop), bypass:sum(dec.bypass), rollupIn:sum(dec.rollup), raw:sum(dec.raw),
+    rollupOut:(c.emitted||{}).rollup||0, wire:c.out_wire_bytes, rawb:c.out_raw_bytes, rej:sum(c.rejected), lost:sum(c.lost) };
+  if(st.shadow){ r.shRaw=st.shadow.total.raw_events; r.shRed=st.shadow.total.reduced_events; r.shRawB=st.shadow.total.raw_bytes; r.shRedB=st.shadow.total.reduced_bytes; }
+  return r;
+}
+function push(st){ const t=totals(st); S.hist.push(t); if(S.hist.length>90) S.hist.shift(); }
+function rate(key, win=5){ const h=S.hist; if(h.length<2) return 0; const a=h[Math.max(0,h.length-1-win)], b=h[h.length-1]; const dt=(b.t-a.t)/1000; return dt>0? Math.max(0,(b[key]-a[key])/dt):0; }
+function series(key){ const h=S.hist,o=[]; for(let i=1;i<h.length;i++){const dt=(h[i].t-h[i-1].t)/1000; o.push(dt>0?Math.max(0,(h[i][key]-h[i-1][key])/dt):0);} return o.slice(-45); }
+
+// ---------------------------------------------------------------- simulator (demo without a backend)
+const Sim = (() => {
+  let c=null, t0=Date.now(), last=Date.now();
+  const mode="shadow";
+  function init(){ c={received:{netflow:0},rejected:{},decisions:{dedup:{"":0},drop:{dns_to_corp_resolvers:0,ntp_to_corp_servers:0,multicast_broadcast:0},bypass:{lateral_movement_ports:0,threat_intel:0,denied_traffic:0},rollup:{"":0},raw:{"":0}},
+    emitted:{raw:0,bypass:0,rollup:0,drop_summary:0,fanout_summary:0},http_status:{"200":0,"503":0},batches:{ok:0,retry:0},lost:{},enrich:{geoip:{hit:0,miss:0},dns:{hit:0,miss:0},threat:{hit:0}},
+    engine:{dedup_entries:0,rollup_active_keys:0,fanout_active_sources:0},out_events:0,out_wire_bytes:0,out_raw_bytes:0,queue_batches:0,queue_bytes:0,engine_queue:0,latency_sum_s:0,latency_count:0};
+    c.shadow={raw:0,red:0,rawB:0,redB:0}; }
+  function step(){
+    if(!c) init();
+    const now=Date.now(), dt=Math.max(.5,(now-last)/1000); last=now;
+    const wave=1+0.25*Math.sin((now-t0)/20000)+0.08*(Math.random()-.5);
+    const fin=Math.round(8200*wave*dt);
+    const d=c.decisions, add=(o,k,v)=>o[k]=(o[k]||0)+v;
+    const nDedup=Math.round(fin*.29), nDns=Math.round(fin*.10), nNtp=Math.round(fin*.03), nMc=Math.round(fin*.02);
+    const nLat=Math.round(fin*.022), nIntel=Math.round(fin*.004), nDen=Math.round(fin*.005);
+    const nRoll=Math.round(fin*.41); const nRaw=fin-nDedup-nDns-nNtp-nMc-nLat-nIntel-nDen-nRoll;
+    add(c.received,"netflow",fin); add(d.dedup,"",nDedup); add(d.drop,"dns_to_corp_resolvers",nDns); add(d.drop,"ntp_to_corp_servers",nNtp); add(d.drop,"multicast_broadcast",nMc);
+    add(d.bypass,"lateral_movement_ports",nLat); add(d.bypass,"threat_intel",nIntel); add(d.bypass,"denied_traffic",nDen); add(d.rollup,"",nRoll); add(d.raw,"",nRaw);
+    const rOut=Math.round(nRoll/24), out=nRaw+nLat+nIntel+nDen+rOut;
+    const e=c.emitted; e.raw+=nRaw; e.bypass+=nLat+nIntel+nDen; e.rollup+=rOut; if(Math.random()<.15) e.drop_summary+=3; if(Math.random()<.05) e.fanout_summary+=1;
+    c.shadow.raw+=fin-nDedup; c.shadow.red+=out; c.shadow.rawB+=(fin-nDedup)*742; c.shadow.redB+=out*806;
+    const sent=fin-nDedup; c.out_events+=sent; c.out_raw_bytes+=sent*742; c.out_wire_bytes+=sent*742/13.6;
+    const reqs=Math.max(1,Math.round(sent/1000)); c.http_status["200"]+=reqs; c.batches.ok+=reqs; if(Math.random()<.03){c.http_status["503"]+=1;c.batches.retry+=1;}
+    c.latency_sum_s+=reqs*.042; c.latency_count+=reqs;
+    c.enrich.geoip.hit+=Math.round(out*.6); c.enrich.geoip.miss+=Math.round(out*.02); c.enrich.dns.hit+=Math.round(out*.03); c.enrich.dns.miss+=Math.round(out*.004); c.enrich.threat.hit+=nIntel;
+    c.engine.dedup_entries=Math.round(sent*30/dt*.5); c.engine.rollup_active_keys=Math.round(1800*wave); c.engine.fanout_active_sources=Math.round(420*wave);
+    c.queue_batches=Math.random()<.9?0:2; c.queue_bytes=c.queue_batches*61000;
+    const st={product:"FlowTrim",version:"0.3.0 (simulated)",mode,rule_version:"35587137852f",started:new Date(t0).toISOString(),now:new Date(now).toISOString(),
+      inputs:[{name:"NetFlow v5/v9 · IPFIX",listen:["0.0.0.0:2055","0.0.0.0:4739"]}],
+      output:{target:"onum",url:"https://onum-dist…corp.example:8088/services/collector/event",auth:"Splunk",gzip:true,queue:true},
+      rules:{bypass:["threat_intel","denied_traffic","lateral_movement_ports"],drop:["multicast_broadcast","dns_to_corp_resolvers","ntp_to_corp_servers"],dedup:true,rollup:true,rollup_window_s:60,fanout:true},
+      enrichment:{geoip:true,reverse_dns:true,hostnames:true,metadata:true,interfaces_file:false,snmp:true,services:true,apps:true,threat_lists:true,community_id:true,client_server:true,pseudonymize:false},
+      counters:JSON.parse(JSON.stringify(c)),
+      shadow:{since:new Date(t0).toISOString(),total:{raw_events:c.shadow.raw,raw_bytes:c.shadow.rawB,reduced_events:c.shadow.red,reduced_bytes:c.shadow.redB},
+        total_event_reduction_pct:+pct(c.shadow.red,c.shadow.raw).toFixed(1),total_byte_reduction_pct:+pct(c.shadow.redB,c.shadow.rawB).toFixed(1),
+        flows_by_decision:{dedup:sum(d.dedup),"drop:dns_to_corp_resolvers":d.drop.dns_to_corp_resolvers,"drop:ntp_to_corp_servers":d.drop.ntp_to_corp_servers,"drop:multicast_broadcast":d.drop.multicast_broadcast,"bypass:lateral_movement_ports":d.bypass.lateral_movement_ports,"bypass:threat_intel":d.bypass.threat_intel,"bypass:denied_traffic":d.bypass.denied_traffic,rollup:d.rollup[""]}},
+      downstream:[{name:"Falcon Onum (mock)",role:"onum"},{name:"Falcon NG-SIEM (mock)",role:"ngsiem"}]};
+    return st;
+  }
+  function downstream(){ if(!c) return []; const ev=c.shadow.red; return [
+    {name:"Falcon Onum",role:"onum",ok:true,stats:{events:c.out_events,forwarded_events:c.out_events,wire_bytes:c.out_wire_bytes}},
+    {name:"Falcon NG-SIEM",role:"ngsiem",ok:true,stats:{events:c.out_events,raw_bytes:c.out_raw_bytes}}]; }
+  return {step,downstream};
+})();
+
+const SAMPLE = {
+ input: {time:1794872868.325,host:"192.0.2.1",input:{source:"netflow",type:"IPFIX",exporter:"192.0.2.1"},event:{class_uid:4001,activity_name:"Traffic",start_time:1794872866175,end_time:1794872868325,
+  src_endpoint:{ip:"10.1.5.5",port:51344,interface_uid:"3"},dst_endpoint:{ip:"203.0.113.66",port:443,interface_uid:"7"},connection_info:{protocol_num:6,protocol_name:"tcp",direction:"Outbound",tcp_flags:27},traffic:{bytes:820,packets:6},device:{ip:"192.0.2.1"},
+  unmapped:{flowtrim:{reduction:"none",flow_type:"IPFIX",direction:"outbound"}}}},
+ output: {time:1794872928.325,host:"192.0.2.1",source:"flowtrim",event:{class_uid:4001,class_name:"Network Activity",activity_id:6,activity_name:"Traffic",type_uid:400106,severity_id:1,count:30,
+  time:1794872928325,start_time:1794872866175,end_time:1794872928325,
+  src_endpoint:{ip:"10.1.5.5",hostname:"wks-0417.corp.example",interface_name:"Gi0/0/3"},
+  dst_endpoint:{ip:"203.0.113.66",port:443,svc_name:"https",interface_name:"Te0/1/0",location:{country:"NL",city:"Amsterdam",continent:"EU"},autonomous_system:{number:64501,name:"Example Hosting B.V."}},
+  connection_info:{protocol_num:6,protocol_name:"tcp",direction:"Outbound",direction_id:2,tcp_flags:27},traffic:{bytes:24600,packets:180},device:{ip:"192.0.2.1"},
+  metadata:{version:"1.3.0",product:{name:"FlowTrim"},log_name:"netflow"},
+  unmapped:{flowtrim:{reduction:"rollup",flow_count:30,distinct_src_ports:30,iat_ms:{samples:30,min:2000,max:2000,mean:2000,stddev:0},exporters:["192.0.2.1","192.0.2.2"],server:"dst",src_meta:{site:"dallas",zone:"workstations"},flow_type:"IPFIX",direction:"outbound",rule_version:"35587137852f"}}}}
+};
+
+// ---------------------------------------------------------------- views
+let page="overview";
+function setPage(){ page=(location.hash||"#overview").slice(1); if(!PAGES.find(p=>p[0]===page)) page="overview";
+  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on",a.dataset.p===page));
+  $("#title").textContent=PAGES.find(p=>p[0]===page)[1]; $("#side").classList.remove("open"); render(true); }
+addEventListener("hashchange", setPage);
+
+function header(){
+  const st=S.st; if(!st) return;
+  $("#mode").className="pill "+st.mode; $("#mode").textContent=st.mode==="shadow"?"SHADOW MODE":"ENFORCE MODE";
+  $("#live").className="pill"+(S.sim?" sim":""); $("#live").innerHTML=S.sim?"◆ Simulation":'<span class="dot"></span>Live';
+  $("#crumb").textContent=`${st.product} ${st.version} · rules ${st.rule_version} · up ${uptime(st)}`;
+  $("#sidefoot").innerHTML=`Target: <code>${esc(st.output?st.output.target:"stdout")}</code><br>Inputs: ${st.inputs.map(i=>esc(i.name)).join(", ")}<br><span style="opacity:.7">MIT licensed · open source</span>`;
+}
+function uptime(st){ const s=(new Date(st.now)-new Date(st.started))/1000; return s>86400?Math.floor(s/86400)+"d":s>3600?Math.floor(s/3600)+"h":Math.floor(s/60)+"m"; }
+
+function render(full=true){
+  header(); if(!S.st) return;
+  if(!full && (page==="sizing"||page==="records"||page==="walkthrough")) return; // keep interactive pages stable
+  const v=$("#view"); const fn=VIEWS[page]; const html=fn(); v.innerHTML=(S.sim?`<div class="banner">◆ <b>Simulation mode.</b> No FlowTrim instance is reachable from this page, so the console is driving itself with realistic synthetic traffic. Run <code>demo/run-demo.sh</code> (or point a browser at a running FlowTrim's telemetry port) to see live data.</div>`:"")+html;
+  if(page==="sizing") bindSizing(); if(page==="records") bindRecords(); if(page==="walkthrough") bindWalk();
+}
+
+function kpis(){
+  const t=S.hist[S.hist.length-1]||{}; const st=S.st;
+  const rin=rate("in",15), rout= st.mode==="shadow" ? rate("shRed",15) : rate("emitted",15);
+  const evRed = st.mode==="shadow"&&st.shadow ? st.shadow.total_event_reduction_pct : pct(t.emitted, t.in);
+  const byRed = st.mode==="shadow"&&st.shadow ? st.shadow.total_byte_reduction_pct : null;
+  const ok=(st.counters.http_status||{}), okN=Object.entries(ok).filter(([k])=>k[0]==="2").reduce((a,[,v])=>a+v,0), allN=sum(ok);
+  const lat = st.counters.latency_count? (1000*st.counters.latency_sum_s/st.counters.latency_count):null;
+  const card=(lab,v,sub,sp,color,badge="")=>`<div class="card kpi"><div class="lab">${lab}${badge}</div><div class="v">${v}</div><div class="sub">${sub}</div>${sp?spark(sp,color):""}</div>`;
+  return `<div class="grid kpis">
+    ${card("Flows in", fmt(rin)+"<span class='small muted'> /s</span>", fmt(t.in)+" total", series("in"), "#4f5bd5")}
+    ${card(st.mode==="shadow"?"Records out (projected)":"Records out", fmt(rout)+"<span class='small muted'> /s</span>", fmt(st.mode==="shadow"?t.shRed:t.emitted)+" total", series(st.mode==="shadow"?"shRed":"emitted"), "#0ea5a4")}
+    ${card("Event reduction", evRed.toFixed(1)+"%", st.mode==="shadow"?"what enforce would cut":"records vs flows", null)}
+    ${card("Byte reduction", byRed!=null?byRed.toFixed(1)+"%":(t.rawb?bytes(t.rawb):"—"), byRed!=null?"uncompressed, to NG-SIEM":"uncompressed sent", null)}
+    ${card("Wire savings (gzip)", t.rawb&&t.wire?(t.rawb/t.wire).toFixed(1)+"×":"—", t.wire?bytes(t.wire)+" on the wire":"", null)}
+    ${card("Delivery", allN?((100*okN/allN).toFixed(2)+"%"):"—", (lat?lat.toFixed(0)+" ms avg · ":"")+"queue "+fmt(st.counters.queue_batches)+" batches", null, null, allN&&okN/allN<.98?" <span class='status-warn'>retrying</span>":"")}
+  </div>`;
+}
+
+function pipelineVertical(){
+  const st=S.st, W15=15, rin=rate("in",W15)||0, rd=rate("dedup",W15), rdrop=rate("drop",W15), rby=rate("bypass",W15), rroll=rate("rollupIn",W15);
+  const rout=Math.min(rin, st.mode==="shadow"?rate("shRed",W15):rate("emitted",W15));
+  const ds=S.ds||[], onum=ds.find(d=>d.role==="onum"), ng=ds.find(d=>d.role==="ngsiem"), hasOnum=st.output&&st.output.target==="onum"||!!onum;
+  const rows=[["Exporters","routers · firewalls · probes",fmt(rin)+"/s","#64748b"],["Ingest","decode · templates · sampling",fmt(rin)+"/s","#4f5bd5"],
+    ["Dedup","cross-router duplicates","−"+fmt(rd)+"/s","#7c3aed"],["Policy",`bypass ${fmt(rby)}/s · drop ${fmt(rdrop)}/s`,"−"+fmt(rdrop)+"/s","#dc2626"],
+    ["Rollup",`${fmt(rroll)}/s folded`,"conversations","#16a34a"],["Enrich","geo · ASN · DNS · SNMP · apps · intel",fmt(rout)+"/s","#0284c7"]];
+  if(hasOnum) rows.push(["Falcon Onum","HEC Listener → pipeline",onum&&onum.ok?fmt(onum.stats.events)+" recv'd":"HTTPS · gzip","#0ea5a4"]);
+  rows.push(["Falcon NG-SIEM", hasOnum?"Data Sink (Raw) → connector":"HEC/HTTP Event Connector", ng&&ng.ok?fmt(ng.stats.events)+" stored":"searchable","#f97316"]);
+  const W=340,rh=58,gap=22,H=rows.length*(rh+gap); let s=`<svg class="pipe" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  rows.forEach((r,i)=>{ const y=i*(rh+gap);
+    if(i<rows.length-1) s+=`<path class="flowline anim" d="M40 ${y+rh} L40 ${y+rh+gap}" stroke="${rows[i+1][3]}" stroke-width="4" style="animation-duration:2s"/>`;
+    s+=`<rect x="4" y="${y}" width="${W-8}" height="${rh}" rx="12" fill="var(--panel)" stroke="var(--line)"/><rect x="4" y="${y}" width="5" height="${rh}" rx="2.5" fill="${r[3]}"/>
+      <text x="22" y="${y+24}" font-size="14" font-weight="700" fill="var(--fg)">${esc(r[0])}</text><text x="22" y="${y+44}" font-size="11.5" fill="var(--muted)">${esc(r[1])}</text>
+      <text x="${W-18}" y="${y+35}" font-size="15" font-weight="700" text-anchor="end" fill="${r[3]}">${esc(r[2])}</text>`; });
+  return s+`</svg>`;
+}
+
+function pipelineSVG(compact){
+  if(innerWidth<760) return pipelineVertical();
+  const st=S.st, c=st.counters, dec=c.decisions||{};
+  const W15=15, rin=rate("in",W15)||0, rd=rate("dedup",W15), rdrop=rate("drop",W15), rby=rate("bypass",W15), rroll=rate("rollupIn",W15), rraw=rate("raw",W15);
+  const rout = Math.min(rin, st.mode==="shadow" ? rate("shRed",W15) : rate("emitted",W15));
+  const ds=S.ds||[], onum=ds.find(d=>d.role==="onum"), ng=ds.find(d=>d.role==="ngsiem");
+  const hasOnum = st.output&&st.output.target==="onum" || !!onum;
+  const w=(r)=>Math.max(2,Math.min(22,2+Math.log10(1+r)*5));
+  const spd=(r)=>Math.max(.6,Math.min(6,8/Math.log10(10+r)))+"s";
+  const W=1180,H=compact?300:330;
+  const nodes = [
+    {x:10,  label:"Exporters", sub:"routers · firewalls · probes", val:fmt(rin)+"/s", color:"#64748b"},
+    {x:172, label:"Ingest",  sub:"decode · templates · sampling", val:fmt(rin)+"/s", color:"#4f5bd5"},
+    {x:334, label:"Dedup",   sub:"cross-router duplicates", val:"−"+fmt(rd)+"/s", color:"#7c3aed"},
+    {x:496, label:"Policy",  sub:`bypass ${fmt(rby)}/s · drop ${fmt(rdrop)}/s`, val:"−"+fmt(rdrop)+"/s", color:"#dc2626"},
+    {x:658, label:"Rollup",  sub:`${fmt(rroll)}/s folded into conversations`, val:"→ "+fmt(Math.max(0,rout-rraw-rby))+"/s", color:"#16a34a"},
+    {x:820, label:"Enrich",  sub:"geo · ASN · DNS · SNMP · apps · intel", val:fmt(rout)+"/s", color:"#0284c7"},
+    {x:982, label: hasOnum?"Falcon Onum":"Falcon NG-SIEM", sub: hasOnum?"HEC Listener → pipeline":"HEC/HTTP Event Connector", val: onum&&onum.ok? fmt(onum.stats.events)+" recv'd" : "HTTPS · gzip", color:"#0ea5a4"},
+  ];
+  const nw=148, nh=92, y=70; // box width = nw-14; ~26px animated gap between stages
+  const edge=(x1,x2,r,col)=>`<path class="flowline" d="M${x1} ${y+nh/2} L${x2} ${y+nh/2}" stroke="${col}" stroke-opacity=".18" stroke-width="${w(r)}"/>
+    <path class="flowline anim" d="M${x1} ${y+nh/2} L${x2} ${y+nh/2}" stroke="${col}" stroke-width="${Math.max(2,w(r)/3)}" style="animation-duration:${spd(r)}"/>`;
+  let s=`<svg class="pipe" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  s+=`<rect x="160" y="20" width="810" height="${nh+120}" rx="18" fill="var(--panel2)" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <text x="176" y="44" font-size="12" font-weight="700" fill="var(--muted)" letter-spacing=".6">FLOWTRIM</text>
+      <text x="954" y="44" font-size="11" text-anchor="end" fill="var(--soft)">${esc(st.mode)} mode · rules ${esc(st.rule_version)}</text>`;
+  const rates=[rin,rin,rin-rd,rin-rd-rdrop,rout,rout,rout];
+  for(let i=0;i<nodes.length-1;i++) s+=edge(nodes[i].x+nw, nodes[i+1].x, rates[i+1], nodes[i+1].color);
+  nodes.forEach(n=>{ s+=`<g><rect x="${n.x}" y="${y}" width="${nw-14}" height="${nh}" rx="13" fill="var(--panel)" stroke="var(--line)"/>
+    <rect x="${n.x}" y="${y}" width="5" height="${nh}" rx="2.5" fill="${n.color}"/>
+    <text x="${n.x+16}" y="${y+24}" font-size="13.5" font-weight="700" fill="var(--fg)">${esc(n.label)}</text>
+    <text x="${n.x+16}" y="${y+50}" font-size="17" font-weight="700" fill="${n.color}">${esc(n.val)}</text>
+    <foreignObject x="${n.x+14}" y="${y+56}" width="${nw-34}" height="34"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:10.5px;line-height:1.25;color:var(--muted)">${esc(n.sub)}</div></foreignObject></g>`; });
+  // drop / dedup sinks
+  const sink=(x,label,r,col)=>`<path d="M${x+60} ${y+nh} C ${x+60} ${y+nh+30}, ${x+60} ${y+nh+30}, ${x+60} ${y+nh+48}" class="flowline anim" stroke="${col}" stroke-width="${Math.max(1.5,w(r)/3)}" style="animation-duration:${spd(r)}"/>
+     <text x="${x+60}" y="${y+nh+64}" text-anchor="middle" font-size="11" fill="${col}" font-weight="600">${label} ${fmt(r)}/s</text>`;
+  s+=sink(334,"duplicates",rd,"#7c3aed")+sink(496,"dropped",rdrop,"#dc2626");
+  s+=`<text x="${658+60}" y="${y+nh+64}" text-anchor="middle" font-size="11" fill="#16a34a" font-weight="600">${fmt(rroll)}/s → ${fmt(Math.max(1,rroll/24))}/s</text>`;
+  // final hop
+  if(hasOnum){
+    const x=982, x2=1110, ry=y+nh+70;
+    s+=`<path class="flowline" d="M${x+60} ${y+nh} L${x+60} ${ry} L${x2-40} ${ry}" stroke="#f97316" stroke-opacity=".18" stroke-width="${w(rout)}"/>
+        <path class="flowline anim" d="M${x+60} ${y+nh} L${x+60} ${ry} L${x2-40} ${ry}" stroke="#f97316" stroke-width="${Math.max(2,w(rout)/3)}" style="animation-duration:${spd(rout)}"/>
+        <rect x="${x2-40}" y="${ry-28}" width="110" height="56" rx="12" fill="var(--panel)" stroke="var(--line)"/><rect x="${x2-40}" y="${ry-28}" width="5" height="56" rx="2.5" fill="#f97316"/>
+        <text x="${x2-28}" y="${ry-8}" font-size="12.5" font-weight="700" fill="var(--fg)">NG-SIEM</text>
+        <text x="${x2-28}" y="${ry+14}" font-size="12" font-weight="700" fill="#f97316">${ng&&ng.ok?fmt(ng.stats.events)+" stored":"Data Sink"}</text>`;
+  }
+  s+=`</svg>`;
+  return s;
+}
+
+function decisionsDonut(){
+  const t=S.hist[S.hist.length-1]; if(!t||!t.in) return "<div class='muted small'>Waiting for flows…</div>";
+  const parts=[["Dedup",t.dedup,"#7c3aed"],["Dropped",t.drop,"#dc2626"],["Bypass (raw)",t.bypass,"#0284c7"],["Rolled up",t.rollupIn,"#16a34a"],["Forwarded raw",t.raw,"#94a3b8"]];
+  const tot=parts.reduce((a,p)=>a+p[1],0)||1; let a0=-Math.PI/2, svg=`<svg viewBox="0 0 120 120" width="150" height="150">`;
+  parts.forEach(([n,v,c])=>{ const a1=a0+2*Math.PI*v/tot; if(v>0){const L=a1-a0>Math.PI?1:0; svg+=`<path d="M60 60 L${60+52*Math.cos(a0)} ${60+52*Math.sin(a0)} A52 52 0 ${L} 1 ${60+52*Math.cos(a1)} ${60+52*Math.sin(a1)} Z" fill="${c}"/>`;} a0=a1; });
+  svg+=`<circle cx="60" cy="60" r="32" fill="var(--panel)"/><text x="60" y="58" text-anchor="middle" font-size="15" font-weight="700" fill="var(--fg)">${fmt(t.in)}</text><text x="60" y="72" text-anchor="middle" font-size="8.5" fill="var(--muted)">flows</text></svg>`;
+  return `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">${svg}<div style="flex:1;min-width:150px">${parts.map(([n,v,c])=>`<div style="display:flex;justify-content:space-between;gap:8px;margin:5px 0;font-size:12.5px"><span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${c};margin-right:7px"></i>${n}</span><b>${(100*v/tot).toFixed(1)}%</b></div>`).join("")}</div></div>`;
+}
+
+const VIEWS = {
+overview(){
+  const st=S.st;
+  return `${kpis()}
+  <div class="card" style="margin-top:16px"><h3>Live pipeline <small>NetFlow → FlowTrim → ${st.output&&st.output.target==="onum"?"Falcon Onum → Falcon NG-SIEM":"Falcon NG-SIEM"}</small></h3>${pipelineSVG(false)}
+  <div class="legend"><span><i style="background:#7c3aed"></i>dedup removes duplicate exports</span><span><i style="background:#dc2626"></i>drop rules (audited in drop_summary)</span><span><i style="background:#0284c7"></i>bypass: never reduced</span><span><i style="background:#16a34a"></i>rollup keeps counts, timing, flags</span></div></div>
+  <div class="grid two" style="margin-top:16px">
+    <div class="card"><h3>Where the flows went</h3>${decisionsDonut()}</div>
+    <div class="card"><h3>Shadow report <small>${st.mode==="shadow"?"projected savings":"enforce mode"}</small></h3>${shadowCard()}</div>
+  </div>`;
+},
+walkthrough(){
+  return `<div class="card"><h3>From a NetFlow packet to an NG-SIEM event <small>click a step</small></h3>
+  <div class="steps" id="steps">${WALK.map((w,i)=>`<div class="step${i===walkI?" on":""}" data-i="${i}"><div class="no">STEP ${i+1}</div><b>${w.t}</b><span>${w.s}</span></div>`).join("")}</div></div>
+  <div class="grid half" style="margin-top:16px"><div class="card"><h3>${WALK[walkI].t}</h3><div style="font-size:13.5px">${WALK[walkI].d}</div></div>
+  <div class="card"><h3>What the data looks like here</h3>${WALK[walkI].x()}</div></div>`;
+},
+pipeline(){
+  const t=S.hist[S.hist.length-1]||{}, st=S.st, c=st.counters;
+  const rows=[["Received",t.in,"#4f5bd5","flows decoded from UDP / Firehose"],["After dedup",t.in-t.dedup,"#7c3aed","exact duplicates removed"],["After drop rules",t.in-t.dedup-t.drop,"#dc2626","known-boring traffic removed"],
+    ["Forwarded raw (bypass + unmatched)",t.bypass+t.raw,"#0284c7","never aggregated"],["Folded into rollups",t.rollupIn,"#16a34a",fmt(t.rollupOut)+" rollup records"],
+    [st.mode==="shadow"?"Records enforce would send":"Records sent",st.mode==="shadow"?t.shRed:t.emitted,"#0ea5a4","incl. summaries"]];
+  const max=Math.max(1,t.in);
+  return `<div class="card"><h3>Reduction funnel</h3><table>${rows.map(([n,v,col,sub])=>`<tr><td style="width:34%"><b>${n}</b><div class="small muted">${sub}</div></td><td><div class="bar" style="height:14px"><i style="width:${(100*(v||0)/max).toFixed(1)}%;background:${col}"></i></div></td><td class="n" style="width:110px"><b>${fmt(v)}</b></td><td class="n muted" style="width:80px">${(100*(v||0)/max).toFixed(1)}%</td></tr>`).join("")}</table></div>
+  <div class="grid three" style="margin-top:16px">
+   <div class="card"><h3>Engine state</h3><table><tr><td>Dedup entries</td><td class="n">${fmt(c.engine.dedup_entries)}</td></tr><tr><td>Active rollup conversations</td><td class="n">${fmt(c.engine.rollup_active_keys)}</td></tr><tr><td>Sources tracked for sweeps</td><td class="n">${fmt(c.engine.fanout_active_sources)}</td></tr><tr><td>Engine input queue</td><td class="n">${fmt(c.engine_queue)}</td></tr></table></div>
+   <div class="card"><h3>Ingest health</h3><table>${Object.keys(c.rejected||{}).length?Object.entries(c.rejected).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n">${fmt(v)}</td></tr>`).join(""):`<tr><td class="status-ok">No rejected flows</td><td></td></tr>`}</table><div class="note" style="margin-top:10px">A few <code>template_not_found</code> right after start is normal (v9/IPFIX).</div></div>
+   <div class="card"><h3>Inputs</h3><table>${(st.inputs||[]).map(i=>`<tr><td><b>${esc(i.name)}</b><div class="small muted">${esc((i.listen||[]).join(", "))}</div></td><td class="n">${fmt((c.received||{})[i.name.startsWith("sFlow")?"sflow":i.name.startsWith("AWS")?"aws_firehose":"netflow"])}</td></tr>`).join("")}</table></div>
+  </div>`;
+},
+rules(){
+  const st=S.st, d=st.counters.decisions||{}, tot=Math.max(1,sum(st.counters.received));
+  const row=(type,name,v)=>`<tr><td><span class="tag t-${type==="summary"?"sum":type}">${type}</span></td><td><b>${esc(name||"—")}</b></td><td class="n">${fmt(v)}</td><td style="width:34%"><div class="bar"><i style="width:${(100*v/tot).toFixed(1)}%;background:${{bypass:"#0284c7",drop:"#dc2626",dedup:"#7c3aed",rollup:"#16a34a",raw:"#94a3b8"}[type]}"></i></div></td><td class="n muted">${(100*v/tot).toFixed(1)}%</td></tr>`;
+  let rows=""; for(const type of ["dedup","bypass","drop","rollup","raw"]) for(const [r,v] of Object.entries(d[type]||{})) rows+=row(type, r||({dedup:"exact duplicates",rollup:"conversation rollup",raw:"unmatched (forwarded raw)"}[type]), v);
+  return `<div class="card"><h3>Rule hits <small>of ${fmt(tot)} flows · order: dedup → bypass → drop → rollup</small></h3><table><tr><th>Stage</th><th>Rule</th><th class="n">Flows</th><th>Share</th><th class="n">%</th></tr>${rows}</table></div>
+  <div class="grid half" style="margin-top:16px"><div class="card"><h3>Safety rails</h3><table>
+   <tr><td>Bypass beats drop</td><td class="status-ok">always</td></tr><tr><td>Empty drop rule</td><td class="status-ok">refused at load</td></tr><tr><td>Capacity exceeded</td><td class="status-ok">fails open (raw)</td></tr><tr><td>Audit trail</td><td class="status-ok">drop_summary records</td></tr><tr><td>Rule version on every record</td><td><code>${esc(st.rule_version)}</code></td></tr></table></div>
+   <div class="card"><h3>Shadow report</h3>${shadowCard()}</div></div>`;
+},
+enrichment(){
+  const st=S.st, en=st.enrichment||{}, L=st.counters.enrich||{};
+  const mods=[["geoip","GeoIP & ASN","MaxMind · DB-IP · IPinfo MMDB","country, city, coords, ASN, org"],["reverse_dns","Reverse DNS","async, cached, scoped","src/dst hostname"],["hostnames","User-defined hostnames","YAML ip → name","hostname (wins over DNS)"],
+   ["metadata","User-defined metadata","CIDR → tags","site, zone, owner…"],["snmp","SNMP interface names","IF-MIB poll v2c/v3","ifName, ifAlias, speed"],["interfaces_file","Interface file","exporter → ifIndex","ifName, description"],
+   ["services","Service names","built-in + custom","svc_name (https, smb…)"],["apps","SaaS / app identification","app → CIDRs","app_name"],["threat_lists","Threat-intel tagging","any IP/CIDR feed","threat[], severity"],
+   ["community_id","Community ID","v1 spec-exact","connection_info.community_uid"],["client_server","Client / server inference","ports + services","server: src|dst"],["pseudonymize","IP pseudonymization","HMAC or truncate","privacy for selected CIDRs"]];
+  const rate=k=>{const o=L[k]; if(!o) return "—"; const h=o.hit||o.ok||0, t=sum(o); return t?`${(100*h/t).toFixed(1)}% hit · ${fmt(t)}`:"—";};
+  return `<div class="card"><h3>Enrichment modules <small>applied after reduction, in parallel encoders</small></h3><table><tr><th>Module</th><th>Source</th><th>Adds</th><th>Status</th><th class="n">Lookups</th></tr>
+  ${mods.map(([k,n,src,adds])=>`<tr><td><b>${n}</b></td><td class="muted">${src}</td><td class="muted">${adds}</td><td>${en[k]?'<span class="tag t-rollup">enabled</span>':'<span class="tag t-raw">off</span>'}</td><td class="n">${k==="geoip"?rate("geoip"):k==="reverse_dns"?rate("dns"):k==="snmp"?rate("snmp"):k==="threat_lists"?fmt((L.threat||{}).hit||0)+" hits":"—"}</td></tr>`).join("")}</table></div>
+  <div class="card" style="margin-top:16px"><h3>Parity with ElastiFlow <small>enrichment features</small></h3><table><tr><th>Capability</th><th>ElastiFlow</th><th>FlowTrim</th></tr>
+  ${[["GeoIP / ASN","✓","✓ (any MMDB, incl. free DB-IP / IPinfo Lite)"],["Reverse DNS + user-defined hostnames","✓","✓"],["User-defined IP metadata","✓","✓"],["Interface names (SNMP / user-defined)","✓","✓ (options-template names: roadmap)"],
+     ["Application ID","✓ (NetIntel DB)","✓ services + your app CIDR lists"],["Threat intel","✓ NetIntel (commercial feed)","✓ any feed you supply"],["Community ID","✓","✓ (verified against reference)"],["Client/server inference","✓","✓"],["Obscure IPs","✓","✓ HMAC / truncate"],
+     ["Sample-rate correction / per-exporter override","✓","✓"],["Dashboards","✓ Kibana/OpenSearch/Splunk","→ Falcon NG-SIEM"],["Rate cap on free tier","500 / 4,000 rec/s","none"]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td><b>${r[2]}</b></td></tr>`).join("")}</table></div>`;
+},
+delivery(){
+  const st=S.st, c=st.counters, h=c.http_status||{}, b=c.batches||{}, tot=Math.max(1,sum(h));
+  const ds=S.ds||[];
+  return `<div class="grid three"><div class="card"><h3>HTTP responses</h3><table>${Object.entries(h).sort().map(([k,v])=>`<tr><td><b class="${k[0]==="2"?"status-ok":k[0]==="5"||k==="429"?"status-warn":"status-bad"}">${esc(k)}</b></td><td style="width:50%"><div class="bar"><i style="width:${(100*v/tot).toFixed(1)}%;background:${k[0]==="2"?"#16a34a":k[0]==="5"?"#d97706":"#dc2626"}"></i></div></td><td class="n">${fmt(v)}</td></tr>`).join("")||"<tr><td class='muted'>No requests yet</td></tr>"}</table></div>
+  <div class="card"><h3>Batches</h3><table>${Object.entries(b).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n">${fmt(v)}</td></tr>`).join("")||"<tr><td class='muted'>—</td></tr>"}<tr><td>Avg request latency</td><td class="n">${c.latency_count?(1000*c.latency_sum_s/c.latency_count).toFixed(0)+" ms":"—"}</td></tr></table></div>
+  <div class="card"><h3>Buffer</h3><table><tr><td>Queued batches</td><td class="n">${fmt(c.queue_batches)}</td></tr><tr><td>Queued bytes</td><td class="n">${bytes(c.queue_bytes)}</td></tr><tr><td>Events lost</td><td class="n ${sum(c.lost)?"status-bad":"status-ok"}">${fmt(sum(c.lost))}</td></tr><tr><td>Uncompressed sent</td><td class="n">${bytes(c.out_raw_bytes)}</td></tr><tr><td>Wire bytes</td><td class="n">${bytes(c.out_wire_bytes)}</td></tr></table></div></div>
+  <div class="card" style="margin-top:16px"><h3>Destination <small>${esc(st.output?st.output.target:"")}</small></h3><table><tr><td>Endpoint</td><td><code>${esc(st.output?st.output.url:"stdout")}</code></td></tr><tr><td>Auth scheme</td><td>${esc(st.output?st.output.auth:"")}</td></tr><tr><td>gzip</td><td>${st.output&&st.output.gzip?"on (auto-probes if unsupported)":"off"}</td></tr><tr><td>Disk queue</td><td>${st.output&&st.output.queue?'<span class="status-ok">enabled</span>':'<span class="status-warn">memory only</span>'}</td></tr></table></div>
+  ${ds.length?`<div class="card" style="margin-top:16px"><h3>Downstream hops <small>demo receivers report their own counts</small></h3><table><tr><th>Hop</th><th>Status</th><th class="n">Events received</th><th class="n">Forwarded</th><th class="n">Bytes</th></tr>${ds.map(d=>`<tr><td><b>${esc(d.name)}</b></td><td>${d.ok?'<span class="status-ok">reachable</span>':'<span class="status-bad">unreachable</span>'}</td><td class="n">${d.ok?fmt(d.stats.events):"—"}</td><td class="n">${d.ok&&d.stats.forwarded_events!=null?fmt(d.stats.forwarded_events):"—"}</td><td class="n">${d.ok?bytes(d.stats.raw_bytes||d.stats.wire_bytes):"—"}</td></tr>`).join("")}</table></div>`:""}`;
+},
+records(){
+  return `<div class="card"><h3>Record inspector <small>sampled from the live stream</small></h3><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn" id="rrefresh">↻ Refresh</button><select id="rkind" style="width:auto"><option value="output">Sent (after reduction + enrichment)</option><option value="preview">Shadow: what enforce would send</option></select></div>
+  <div class="grid half"><div><div class="small muted" style="margin-bottom:6px">INPUT · as received (normalized flow)</div><pre class="json" id="rin">loading…</pre></div><div><div class="small muted" style="margin-bottom:6px">OUTPUT · HEC envelope sent onward</div><pre class="json" id="rout">loading…</pre></div></div></div>`;
+},
+sizing(){ return SIZING_HTML; },
+};
+
+function shadowCard(){
+  const sh=S.st.shadow; if(!sh) return `<div class="muted small">Collected in shadow mode only. In enforce mode the funnel and rule hits show the actual reduction.</div>`;
+  const t=sh.total;
+  return `<table><tr><td>Unreduced records (sent now)</td><td class="n">${fmt(t.raw_events)}</td><td class="n muted">${bytes(t.raw_bytes)}</td></tr>
+  <tr><td>Enforce would send</td><td class="n">${fmt(t.reduced_events)}</td><td class="n muted">${bytes(t.reduced_bytes)}</td></tr>
+  <tr><td><b>Projected reduction</b></td><td class="n"><b class="up">${sh.total_event_reduction_pct}%</b></td><td class="n"><b class="up">${sh.total_byte_reduction_pct}%</b></td></tr></table>
+  <div class="note" style="margin-top:10px">Switch to <code>mode: enforce</code> after the SOC reviews at least a week of shadow data.</div>`;
+}
+
+// ---------------------------------------------------------------- walkthrough
+let walkI=0;
+const hex = "000a 01e4 6745 2b8c 0000 0c4f 0000 0064 0002 0064 0100 000c 0008 0004 000c 0004 0007 0002 000b 0002 0004 0001 0006 0002 0001 0008 0002 0008 0098 0008 0099 0008 000a 0004 000e 0004 …\n0100 0174  0a01 0505  cb00 7142  c890 01bb  06  001b  0000 0000 0000 0334  0000 0000 0000 0006  0000 019a 4f2b 1e7f …";
+const WALK=[
+ {t:"Exporter sends IPFIX",s:"router → UDP 4739",d:"Your routers, firewalls and probes export flow records over UDP. IPFIX and NetFlow v9 send a <b>template</b> first (which fields, how long), then data records that follow it. FlowTrim listens with large socket buffers so bursts aren't dropped by the kernel.",x:()=>`<pre class="json">${esc(hex)}</pre><div class="small muted" style="margin-top:8px">Template 256 (12 fields) then data records · <code>demo/samples/*.pcap</code> open in Wireshark</div>`},
+ {t:"Decode & normalize",s:"templates · sampling · UTC",d:"goflow2 decodes the packet using the exporter's template. FlowTrim converts times to UTC, multiplies bytes/packets by the sampling rate once, and labels direction (internal, outbound, inbound, external) from your address plan.",x:()=>`<pre class="json">${hl(SAMPLE.input)}</pre>`},
+ {t:"Dedup",s:"same flow, two routers",d:"The same conversation crossing two routers is exported twice. FlowTrim fingerprints each flow (5-tuple, start time ±1 s, bytes, packets) and drops the second copy. Exporter is deliberately <i>not</i> in the key.",x:()=>`<table><tr><th>Exporter</th><th>Flow</th><th>Result</th></tr><tr><td>192.0.2.1</td><td>10.1.5.5:51344 → 203.0.113.66:443 · 820 B</td><td><span class="tag t-raw">kept</span></td></tr><tr><td>192.0.2.2</td><td>10.1.5.5:51344 → 203.0.113.66:443 · 820 B (+400 ms)</td><td><span class="tag t-dedup">duplicate</span></td></tr></table>`},
+ {t:"Bypass & drop",s:"protect first, then trim",d:"<b>Bypass</b> rules (threat-intel hits, denied traffic, lateral-movement ports) are never reduced. <b>Drop</b> rules remove traffic you've named as boring (DNS/NTP to your own servers, multicast). Every drop is counted in a <code>drop_summary</code> record so the SIEM keeps an audit trail.",x:()=>`<table><tr><td><span class="tag t-bypass">bypass</span></td><td>10.1.7.7 → 198.51.100.7:8443</td><td>intel list</td></tr><tr><td><span class="tag t-bypass">bypass</span></td><td>45.33.1.9 → 10.1.0.20:3389</td><td>REJECT</td></tr><tr><td><span class="tag t-drop">drop</span></td><td>10.1.2.30 → 10.0.0.53:53</td><td>corp resolver</td></tr><tr><td><span class="tag t-drop">drop</span></td><td>10.1.0.44 → 224.0.0.251:5353</td><td>multicast</td></tr></table>`},
+ {t:"Rollup",s:"30 flows → 1 record",d:"Repeated conversations in a window fold into one record that keeps what detections need: first/last seen, flow count, byte and packet totals, TCP-flag union, distinct source ports, and the <b>gap statistics</b> between connections. A 2-second beacon shows up as mean 2000 ms, stddev ≈ 0.",x:()=>`<pre class="json">${hl({count:30,start_time:"first seen",end_time:"last seen",traffic:{bytes:24600,packets:180},connection_info:{tcp_flags:27},unmapped:{flowtrim:SAMPLE.output.event.unmapped.flowtrim}})}</pre>`},
+ {t:"Enrich",s:"geo · ASN · DNS · SNMP · apps",d:"Only the reduced stream is enriched, in parallel: GeoIP/ASN from MMDB files, reverse DNS (async), your hostname and metadata files, interface names from SNMP, service and SaaS app names, threat-list tags, Community ID and client/server roles.",x:()=>`<pre class="json">${hl({src_endpoint:SAMPLE.output.event.src_endpoint,dst_endpoint:SAMPLE.output.event.dst_endpoint})}</pre>`},
+ {t:"Deliver to Onum",s:"HEC over HTTPS · gzip",d:"Records are batched (1,000 / 2 MiB / 2 s), gzip-compressed (~10–15× smaller on the wire), fsynced to a disk queue, and POSTed to the Onum HEC Listener. Retries with backoff, 413 splits, gzip auto-probe, and no data loss when the receiver is down.",x:()=>`<pre class="json">POST /services/collector/event HTTP/1.1
+Authorization: Splunk ••••••••
+Content-Type: application/json
+Content-Encoding: gzip
+
+${esc(JSON.stringify({time:SAMPLE.output.time,host:SAMPLE.output.host,source:"flowtrim",event:"{…OCSF Network Activity…}"}))}
+${esc(JSON.stringify({time:SAMPLE.output.time+0.4,host:"192.0.2.1",source:"flowtrim",event:"{…}"}))}</pre>`},
+ {t:"Onum → NG-SIEM",s:"pipeline → Data Sink (Raw)",d:"Onum's pipeline routes, masks or further enriches, then its <b>Falcon NG-SIEM Data Sink</b> (event format <b>Raw</b>) delivers to the HEC/HTTP Event Data Connector. A parser maps the OCSF fields; the record is searchable in NG-SIEM with <code>#Vendor=\"flowtrim\"</code>.",x:()=>`<pre class="json">${hl(SAMPLE.output)}</pre>`},
+];
+function bindWalk(){ document.querySelectorAll(".step").forEach(el=>el.onclick=()=>{walkI=+el.dataset.i; render();}); }
+
+// ---------------------------------------------------------------- records
+async function loadRecords(){
+  let data;
+  if(S.sim){ data={input:[SAMPLE.input],output:[SAMPLE.output],preview:[SAMPLE.output]}; }
+  else { try{ data=await getJSON("api/records?n=10"); }catch(e){ data={input:[],output:[],preview:[]}; } }
+  const kind=($("#rkind")||{}).value||"output";
+  const outs=data[kind]&&data[kind].length?data[kind]:data.output;
+  const pick = outs.find(o=>((o.event||{}).unmapped||{}).flowtrim && o.event.unmapped.flowtrim.reduction==="rollup") || outs[0];
+  $("#rin").innerHTML = data.input[0]?hl(data.input[0]):"No input sampled yet";
+  $("#rout").innerHTML = pick?hl(pick):"No output yet";
+}
+function bindRecords(){ $("#rrefresh").onclick=loadRecords; $("#rkind").onchange=loadRecords; if(S.st&&S.st.mode==="shadow") $("#rkind").value="preview"; loadRecords(); }
+
+// ---------------------------------------------------------------- sizing
+const PRESETS={ "Laptop demo":{ex:2,fps:1500,peak:2,red:70,b:780,gz:12,h:1,ha:false}, "Branch office":{ex:10,fps:300,peak:3,red:65,b:780,gz:12,h:8,ha:false},
+  "Enterprise campus":{ex:60,fps:1500,peak:3,red:70,b:800,gz:12,h:8,ha:true}, "Large data center":{ex:300,fps:4000,peak:3,red:75,b:820,gz:12,h:12,ha:true} };
+let SZ=Object.assign({},PRESETS["Enterprise campus"]);
+const SIZING_HTML=`<div class="grid two"><div class="card"><h3>Your environment</h3><div class="presets">${Object.keys(PRESETS).map(k=>`<button class="btn" data-preset="${k}">${k}</button>`).join("")}</div>
+ <div class="grid half" style="gap:0 16px">
+ <div><label class="f">Exporters (routers, firewalls, probes)</label><input type="number" id="sz-ex" min="1"></div>
+ <div><label class="f">Average flows/s per exporter</label><input type="number" id="sz-fps" min="1"></div>
+ <div><label class="f">Peak ÷ average (burst factor)</label><input type="number" id="sz-peak" min="1" step="0.5"></div>
+ <div><label class="f">Expected event reduction % <span id="sz-redv"></span></label><input type="range" id="sz-red" min="0" max="95"></div>
+ <div><label class="f">Avg record size, bytes (OCSF JSON)</label><input type="number" id="sz-b" min="200"></div>
+ <div><label class="f">gzip ratio on the wire</label><input type="number" id="sz-gz" min="1" step="0.5"></div>
+ <div><label class="f">Outage buffer (hours of disk queue)</label><input type="number" id="sz-h" min="0"></div>
+ <div><label class="f">High availability (N+1)</label><select id="sz-ha"><option value="0">No</option><option value="1">Yes</option></select></div></div>
+ <div class="note" style="margin-top:14px">Measure the real reduction % in shadow mode and put it back here. The rate assumptions come from the lab benchmark (zero loss at 200k flows/s on 2 shared vCPUs); they include headroom.</div></div>
+ <div class="card"><h3>Recommendation</h3><div id="sz-out"></div></div></div>
+ <div class="card" style="margin-top:16px"><h3>Demo sizing <small>run the full chain on a laptop</small></h3><table><tr><th>Component</th><th>Process</th><th class="n">CPU</th><th class="n">RAM</th><th>Notes</th></tr>
+ <tr><td>Traffic</td><td><code>flowgen replay</code></td><td class="n">&lt; 5%</td><td class="n">30 MB</td><td>replays <code>demo/samples/enterprise-mix.ipfix.pcap</code> in a loop (~1,300 flows/s)</td></tr>
+ <tr><td>FlowTrim</td><td><code>flowtrim</code></td><td class="n">10–20% of 1 core</td><td class="n">80–150 MB</td><td>this console at <code>http://127.0.0.1:9109</code></td></tr>
+ <tr><td>Falcon Onum (mock)</td><td><code>mockhec -role onum</code></td><td class="n">&lt; 5%</td><td class="n">20 MB</td><td>forwards batches unchanged (Raw)</td></tr>
+ <tr><td>Falcon NG-SIEM (mock)</td><td><code>mockhec -role ngsiem</code></td><td class="n">&lt; 5%</td><td class="n">25 MB</td><td>keeps the last 200 events at <code>/events</code></td></tr>
+ <tr><td><b>Total</b></td><td></td><td class="n"><b>≈ ¼ core</b></td><td class="n"><b>≈ 250 MB</b></td><td>any Mac/Linux laptop; Docker optional</td></tr></table>
+ <div class="note" style="margin-top:10px">Pointing the demo at a <b>real</b> Onum Listener or NG-SIEM connector? Keep the replay at the default rate: one hour ≈ 4.7M flows in, ≈ 1–1.5M records out (≈ 1 GB uncompressed into NG-SIEM). Use a lab tenant and the 10 GB tier's daily budget in mind.</div></div>`;
+function calc(z){
+  const avg=z.ex*z.fps, peak=avg*z.peak, outAvg=avg*(1-z.red/100), outPeak=peak*(1-z.red/100);
+  const perInst=300000; const inst=Math.max(1,Math.ceil(peak/perInst)) + (z.ha?1:0);
+  const pi=peak/Math.max(1,inst-(z.ha?1:0)), po=outPeak/Math.max(1,inst-(z.ha?1:0));
+  const vcpu=Math.max(2, Math.ceil(pi/100000 + po/40000 + 0.5));
+  const ramGB=Math.max(2, Math.ceil((0.4e9 + pi*30*72 + Math.min(500000,pi*25)*420 + 256e6)/1e9*1.5));
+  const inGB=avg*86400*z.b/1e9, outGB=outAvg*86400*z.b/1e9;
+  const wanIn=avg*z.b*8/z.gz/1e6, wanOut=outAvg*z.b*8/z.gz/1e6;
+  const diskGB=Math.max(10, Math.ceil(outAvg/Math.max(1,inst-(z.ha?1:0))*z.b/z.gz*z.h*3600*1.25/1e9));
+  return {avg,peak,outAvg,inst,vcpu,ramGB,inGB,outGB,wanIn,wanOut,diskGB};
+}
+function bindSizing(){
+  const ids=["ex","fps","peak","red","b","gz","h","ha"]; const get=()=>{ids.forEach(k=>{const el=$("#sz-"+k); SZ[k]= k==="ha"? el.value==="1" : +el.value;});};
+  const set=()=>{ids.forEach(k=>{$("#sz-"+k).value = k==="ha"?(SZ[k]?"1":"0"):SZ[k];});};
+  const out=()=>{ get(); const r=calc(SZ); $("#sz-redv").textContent=SZ.red+"%";
+    $("#sz-out").innerHTML=`<div class="grid half" style="gap:12px">
+     <div><div class="small muted">FlowTrim instances</div><div class="big">${r.inst}${SZ.ha?' <span class="small muted">(N+1)</span>':""}</div></div>
+     <div><div class="small muted">Per instance</div><div class="big">${r.vcpu} vCPU · ${r.ramGB} GB</div></div>
+     <div><div class="small muted">Disk queue per instance</div><div class="big">${r.diskGB} GB SSD</div></div>
+     <div><div class="small muted">Peak flows/s</div><div class="big">${fmt(r.peak)}</div></div></div>
+     <table style="margin-top:12px"><tr><th></th><th class="n">Without FlowTrim</th><th class="n">With FlowTrim</th></tr>
+     <tr><td>Records/s (avg)</td><td class="n">${fmt(r.avg)}</td><td class="n"><b>${fmt(r.outAvg)}</b></td></tr>
+     <tr><td>NG-SIEM ingest / day</td><td class="n">${bytes(r.inGB*1e9)}</td><td class="n"><b class="up">${bytes(r.outGB*1e9)}</b></td></tr>
+     <tr><td>WAN to Onum / NG-SIEM (gzip)</td><td class="n">${r.wanIn.toFixed(1)} Mbps</td><td class="n"><b>${r.wanOut.toFixed(1)} Mbps</b></td></tr>
+     <tr><td>Saved per day</td><td class="n" colspan="2"><b class="up">${bytes((r.inGB-r.outGB)*1e9)}</b> · ${(r.inGB-r.outGB).toFixed(0)*30 >0? bytes((r.inGB-r.outGB)*30e9)+" / month":""}</td></tr></table>
+     <div class="small muted" style="margin-top:10px">Pin each exporter to one instance (source-IP affinity) so dedup and rollups stay correct.</div>`; };
+  set(); out(); ids.forEach(k=>$("#sz-"+k).oninput=out);
+  document.querySelectorAll("[data-preset]").forEach(b=>b.onclick=()=>{SZ=Object.assign({},PRESETS[b.dataset.preset]); set(); out();});
+}
+
+// ---------------------------------------------------------------- boot
+setPage();
+poll(); setInterval(poll, 2000);
+</script>
+</body>
+</html>

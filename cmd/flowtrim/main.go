@@ -12,10 +12,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/tripnine/flowtrim/internal/app"
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/output"
-	"github.com/tripnine/flowtrim/internal/rules"
+	"github.com/trip-nine/flowtrim/internal/app"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/enrich"
+	"github.com/trip-nine/flowtrim/internal/output"
+	"github.com/trip-nine/flowtrim/internal/rules"
 )
 
 const usage = `flowtrim — flow-log reducer for Falcon Next-Gen SIEM
@@ -90,6 +91,12 @@ func check(path string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	en, err := enrich.New(cfg, rules.ConfigDir(path), newLogger("error"), enrich.Hooks{})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer en.Close()
 	fmt.Printf("config OK  (mode=%s, rule_version=%s)\n", cfg.Mode, cfg.RuleVersion)
 	if c := cfg.Inputs.NetFlow; c != nil {
 		fmt.Printf("  input netflow      %v\n", c.Listen)
@@ -113,6 +120,11 @@ func check(path string) int {
 	fmt.Printf("  rollup             %v (key=%v, window=%s)\n", r.Rollup.Enabled, r.Rollup.Key, r.Rollup.Window.D())
 	fmt.Printf("  fanout summaries   %v\n", r.Fanout.Enabled)
 	fmt.Printf("  drop summaries     %v\n", *r.DropSummary.Enabled)
+	ec := cfg.Enrich
+	fmt.Printf("  enrichment         geoip=%v dns=%v hostnames=%v metadata=%v interfaces(file=%v snmp=%v) services=%v apps=%v threat_lists=%d community_id=%v client_server=%v pseudonymize=%d\n",
+		ec.GeoIP.CityDB != "" || ec.GeoIP.ASNDB != "", ec.DNS.Enabled, ec.HostnamesFile != "", ec.MetadataFile != "",
+		ec.Interfaces.File != "", ec.Interfaces.SNMP.Enabled, *ec.Apps.Services || ec.Apps.ServicesFile != "", ec.Apps.AppsFile != "",
+		len(ec.Threat), *ec.CommunityID.Enabled, *ec.ClientServer, len(cfg.Privacy.Pseudonymize))
 	if o := cfg.Output.HEC; o != nil {
 		q := "memory"
 		if o.Queue.Dir != "" {

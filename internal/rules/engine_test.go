@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/flow"
-	"github.com/tripnine/flowtrim/internal/ocsf"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/flow"
+	"github.com/trip-nine/flowtrim/internal/ocsf"
 )
 
 const baseYAML = `

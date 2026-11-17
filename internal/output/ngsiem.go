@@ -19,16 +19,18 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/ocsf"
-	"github.com/tripnine/flowtrim/internal/queue"
-	"github.com/tripnine/flowtrim/internal/telemetry"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/enrich"
+	"github.com/trip-nine/flowtrim/internal/ocsf"
+	"github.com/trip-nine/flowtrim/internal/queue"
+	"github.com/trip-nine/flowtrim/internal/telemetry"
 )
 
 // HECPath is appended when the configured URL has no path.
@@ -53,6 +55,14 @@ type NGSIEM struct {
 	sendCtx  context.Context
 	cancel   context.CancelFunc
 	encoders int
+	enricher atomic.Pointer[enrich.Enricher]
+}
+
+// SetEnricher installs (or swaps, on reload) the enrichment stage and returns
+// the previous one. It runs in the encoder workers, i.e. only on records
+// that will be serialized.
+func (o *NGSIEM) SetEnricher(e *enrich.Enricher) *enrich.Enricher {
+	return o.enricher.Swap(e)
 }
 
 type line struct {
@@ -80,7 +90,7 @@ func NormalizeURLPath(raw, defPath string) (string, error) {
 
 // New builds the output. stdout (optional) also receives every NDJSON line.
 func New(cfg *config.HEC, log *slog.Logger, shadow *telemetry.Shadow, stdout io.Writer) (*NGSIEM, error) {
-	o := &NGSIEM{cfg: cfg, log: log, shadow: shadow, stdout: stdout, encoders: 4}
+	o := &NGSIEM{cfg: cfg, log: log, shadow: shadow, stdout: stdout, encoders: max(4, runtime.NumCPU())}
 	o.in = make(chan ocsf.Event, 65536)
 	o.lines = make(chan line, 65536)
 	if cfg == nil { // stdout-only mode
@@ -226,6 +236,11 @@ func (o *NGSIEM) Encode(ev ocsf.Event) ([]byte, error) {
 func (o *NGSIEM) encodeLoop() {
 	defer o.encWG.Done()
 	for ev := range o.in {
+		// enrich every record we serialize, including shadow "would send"
+		// records, so the shadow byte comparison stays apples to apples
+		if en := o.enricher.Load(); en != nil {
+			en.Apply(&ev)
+		}
 		b, err := o.Encode(ev)
 		if err != nil {
 			telemetry.EventsDropped.WithLabelValues("encode_error").Inc()
@@ -234,9 +249,15 @@ func (o *NGSIEM) encodeLoop() {
 		switch ev.Shadow {
 		case ocsf.ShadowReduced:
 			o.shadow.Reduced(ev.Kind, len(b))
+			if telemetry.ShadowPreview.Want() {
+				telemetry.ShadowPreview.Put(b)
+			}
 			continue // would-have-sent: count only
 		case ocsf.ShadowRaw:
 			o.shadow.Raw(len(b))
+		}
+		if telemetry.OutputRecords.Want() {
+			telemetry.OutputRecords.Put(b)
 		}
 		telemetry.EventsEmitted.WithLabelValues(ev.Kind).Inc()
 		o.lines <- line{b: b, events: 1}

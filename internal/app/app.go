@@ -18,17 +18,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/flow"
-	"github.com/tripnine/flowtrim/internal/ingest"
-	"github.com/tripnine/flowtrim/internal/ocsf"
-	"github.com/tripnine/flowtrim/internal/output"
-	"github.com/tripnine/flowtrim/internal/rules"
-	"github.com/tripnine/flowtrim/internal/telemetry"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/enrich"
+	"github.com/trip-nine/flowtrim/internal/flow"
+	"github.com/trip-nine/flowtrim/internal/ingest"
+	"github.com/trip-nine/flowtrim/internal/ocsf"
+	"github.com/trip-nine/flowtrim/internal/output"
+	"github.com/trip-nine/flowtrim/internal/rules"
+	"github.com/trip-nine/flowtrim/internal/telemetry"
 )
 
 // Version is set at build time.
-var Version = "dev"
+var Version = "0.3.0"
 
 type stopper interface{ Stop() }
 
@@ -85,6 +86,12 @@ func (a *App) hooks() rules.Hooks {
 	}
 }
 
+func (a *App) newEnricher(cfg *config.Config) (*enrich.Enricher, error) {
+	return enrich.New(cfg, filepath.Dir(a.cfgPath), a.log, enrich.Hooks{
+		Lookup: func(kind, result string) { telemetry.EnrichLookups.WithLabelValues(kind, result).Inc() },
+	})
+}
+
 func (a *App) newEngine(cfg *config.Config) (*rules.Engine, error) {
 	shadow := cfg.Mode == config.ModeShadow
 	emit := func(ev ocsf.Event) {
@@ -125,6 +132,11 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	en, err := a.newEnricher(a.cfg)
+	if err != nil {
+		return err
+	}
+	a.out.SetEnricher(en)
 	telemetry.BuildInfo.WithLabelValues(Version, a.cfg.RuleVersion, a.cfg.Mode).Set(1)
 	a.out.Start()
 
@@ -176,6 +188,7 @@ func (a *App) Run(ctx context.Context) error {
 	close(a.in)
 	<-engineDone
 	a.out.Close(30 * time.Second)
+	a.out.SetEnricher(nil).Close()
 	if a.httpSrv != nil {
 		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -206,6 +219,7 @@ func (a *App) engineLoop(eng *rules.Engine, done chan struct{}) {
 				return
 			}
 			eng.Normalize(f)
+			recordInput(f, rv)
 			if shadow {
 				ev := ocsf.FromFlow(f, f.Start, f.End, f.Bytes, f.Packets, f.TCPFlags,
 					ocsf.Reduction{Kind: "none", RuleVersion: rv, Shadow: true})
@@ -228,9 +242,19 @@ func (a *App) engineLoop(eng *rules.Engine, done chan struct{}) {
 				a.log.Error("reload failed; keeping current rules", "err", err)
 				continue
 			}
+			nen, err := a.newEnricher(nc)
+			if err != nil {
+				telemetry.ConfigReloads.WithLabelValues("error").Inc()
+				a.log.Error("reload failed (enrichment); keeping current rules", "err", err)
+				continue
+			}
 			eng.FlushAll(now)
 			eng = ne
+			if old := a.out.SetEnricher(nen); old != nil {
+				go func() { time.Sleep(5 * time.Second); old.Close() }() // let in-flight encodes finish
+			}
 			a.cfg.Rules, a.cfg.Networks, a.cfg.Normalize, a.cfg.RuleVersion = nc.Rules, nc.Networks, nc.Normalize, nc.RuleVersion
+			a.cfg.Enrich, a.cfg.Privacy = nc.Enrich, nc.Privacy
 			rv = nc.RuleVersion
 			telemetry.ConfigReloads.WithLabelValues("ok").Inc()
 			a.log.Info("rules reloaded", "rule_version", rv)
@@ -252,6 +276,7 @@ func (a *App) sendShadowReport(now time.Time, rv string) {
 
 func (a *App) startTelemetry() error {
 	mux := http.NewServeMux()
+	a.mountAPI(mux)
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok\n")) })
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {

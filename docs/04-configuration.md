@@ -53,6 +53,7 @@ Accepted record shapes: plain flow-log lines, gzip-compressed records, CloudWatc
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `scale_by_sampling_rate` | bool | `true` | Multiply bytes and packets by the exporter's sampling rate once. The rate is kept in `sampling_rate`. |
+| `sampling_overrides[]` | list | — | `{exporter: IP/CIDR, rate: N, force: false}`. Sets the rate for exporters that don't report one (or always, with `force`). |
 
 ## 4.5 `rules`
 
@@ -154,14 +155,46 @@ Order: `dedup` (when `apply_to_bypass`) → `bypass` → `dedup` → `drop` → 
 
 `output.stdout: true` also prints every record as NDJSON (debugging).
 
-## 4.7 `telemetry`
+## 4.7 `enrich` and `privacy`
+
+All enrichment keys, defaults, output fields and the ElastiFlow parity matrix are in [05 Enrichment](05-enrichment.md#53-configuration). Summary:
+
+| Key | Default | Description |
+|---|---|---|
+| `enrich.geoip.city_db` / `asn_db` | — | MMDB files (MaxMind, DB-IP, IPinfo) |
+| `enrich.geoip.skip_internal` | `true` | Don't geo-locate `networks.internal` or private IPs |
+| `enrich.dns.enabled` | `false` | Async reverse DNS (`nameserver`, `timeout 1s`, `cache_ttl 1h`, `negative_ttl 5m`, `workers 8`, `include_cidrs [internal]`) |
+| `enrich.hostnames_file` | — | YAML `ip: hostname`. Wins over DNS. |
+| `enrich.metadata_file` | — | YAML list of `{cidr, tags}`. Longest prefix wins. |
+| `enrich.interfaces.file` | — | YAML `exporter: {ifindex: {name, description, speed_mbps}}` |
+| `enrich.interfaces.snmp.*` | off | `version 2c\|3`, `community`, `v3{user,level,auth_proto,auth_pass,priv_proto,priv_pass}`, `port 161`, `interval 15m`, `exporters [] (= auto)` |
+| `enrich.apps.services` | `true` | Built-in port → service names |
+| `enrich.apps.services_file` / `apps_file` | — | `"tcp/8443": name` / `app: [cidrs]` |
+| `enrich.threat_lists[]` | — | `{name, file, severity}` |
+| `enrich.community_id.enabled` | `true` | Community ID v1 (`seed 0`) |
+| `enrich.client_server` | `true` | Adds `unmapped.flowtrim.server` |
+| `enrich.scope.exclude_cidrs` | — | Skip metadata and GeoIP for these |
+| `privacy.key` | — | HMAC key, required for `mode: hash` (at least 16 characters) |
+| `privacy.pseudonymize[]` | — | `{cidr, mode: hash\|truncate, bits}` |
+
+## 4.8 `telemetry`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `listen` | `host:port` | `127.0.0.1:9109` | `/metrics`, `/healthz`, `/readyz`, `/shadow` |
+| `listen` | `host:port` | `127.0.0.1:9109` | Console at `/`, plus `/api/*`, `/metrics`, `/healthz`, `/readyz`, `/shadow` |
+| `ui` | bool | `true` | Serve the FlowTrim Console |
 | `shadow_report_interval` | duration | `5m` | How often a `shadow_report` is logged and sent |
+| `downstream[]` | list | — | `{name, role: onum\|ngsiem, stats_url}`. Next-hop stats for the console. Real Onum and NG-SIEM don't expose these; the demo mocks do. |
 
-## 4.8 Minimal configs
+**Console API** (JSON, same port):
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/status` | Mode, versions, inputs, output, rules, enrichment flags, all counters, shadow report |
+| `GET /api/records?n=25` | Sampled `input` flows, sent `output` records, shadow `preview` records |
+| `GET /api/downstream` | Each configured downstream's stats (demo) |
+
+## 4.9 Minimal configs
 
 **Smallest useful config (Layout C):**
 

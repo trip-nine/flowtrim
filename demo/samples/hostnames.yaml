@@ -1,0 +1,6 @@
+# ip -> hostname (wins over reverse DNS)
+10.1.5.5: wks-0417.corp.example
+10.1.7.7: wks-0233.corp.example
+10.1.9.9: lab-scanner-02.corp.example
+10.2.0.10: api-gw.corp.example
+10.1.0.20: rdp-jump-01.corp.example

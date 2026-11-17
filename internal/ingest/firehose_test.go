@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/flow"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/flow"
 )
 
 func TestParseVPCLineDefault(t *testing.T) {

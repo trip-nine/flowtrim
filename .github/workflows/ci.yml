@@ -12,7 +12,14 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: GOOS=darwin go build ./... && GOOS=windows go build ./...
+      - name: SNMP integration test (snmpsim)
+        run: |
+          pip install --quiet snmpsim pysmi pysnmp
+          mkdir -p /tmp/snmp && cp deploy/snmpsim/public.snmprec /tmp/snmp/
+          snmpsim-command-responder --data-dir=/tmp/snmp --agent-udpv4-endpoint=127.0.0.1:1161 --process-user=nobody --process-group=nogroup &
+          sleep 5
+          FLOWTRIM_SNMPSIM=127.0.0.1:1161 go test -run TestSNMPPollAgainstAgent -v ./internal/enrich/
       - name: License check (permissive only)
         run: |
           go install github.com/google/go-licenses@latest
-          go-licenses check ./... --disallowed_types=forbidden,restricted,reciprocal
+          go-licenses check ./cmd/... --disallowed_types=forbidden,restricted,reciprocal

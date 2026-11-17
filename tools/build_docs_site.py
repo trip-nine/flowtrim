@@ -16,10 +16,13 @@ out = Path(sys.argv[2])
 
 PAGES = [
     ("home", "Home", repo / "README.md"),
+    ("quick", "0 · Quick start", repo / "docs/00-quickstart.md"),
     ("overview", "1 · Overview", repo / "docs/01-overview.md"),
     ("setup", "2 · Setup", repo / "docs/02-setup.md"),
     ("guide", "3 · User guide", repo / "docs/03-user-guide.md"),
     ("config", "4 · Configuration", repo / "docs/04-configuration.md"),
+    ("enrich", "5 · Enrichment", repo / "docs/05-enrichment.md"),
+    ("demo", "Demo package", repo / "demo/README.md"),
     ("rules", "Rules playbook", repo / "docs/RULES.md"),
     ("plan", "Plan & unknowns", repo / "docs/PLAN.md"),
     ("bench", "Benchmarks", repo / "docs/BENCHMARKS.md"),
@@ -53,8 +56,9 @@ def render(text: str) -> str:
             return f'href="{href}" target="_blank" rel="noopener"'
         if not path and frag:
             return 'data-anchor="' + frag + '"'
-        return f'href="https://github.com/tripnine/flowtrim/blob/main/{path.lstrip("./")}" target="_blank" rel="noopener"'
+        return f'href="https://github.com/trip-nine/flowtrim/blob/main/{path.lstrip("./")}" target="_blank" rel="noopener"'
 
+    body = re.sub(r'src="(?:\.\./)?(?:docs/)?img/', 'src="img/', body)
     return re.sub(r'href="([^"]+)"', relink, body)
 
 
@@ -88,6 +92,7 @@ code {{ background:var(--code); padding:.1em .35em; border-radius:4px; font-size
 pre {{ background:var(--code); padding:12px 14px; border-radius:8px; overflow-x:auto; font-size:13px; line-height:1.45 }}
 pre code {{ background:none; padding:0 }}
 pre.mermaid {{ background:transparent; text-align:center; padding:8px 0 }}
+img {{ max-width:100%; height:auto; border:1px solid var(--line); border-radius:10px }}
 .tablewrap {{ overflow-x:auto; margin:1em 0 }}
 table {{ border-collapse:collapse; width:100%; font-size:14px }}
 th, td {{ border-bottom:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top }}
@@ -97,7 +102,7 @@ blockquote {{ margin:1em 0; padding:.4em 1em; border-left:3px solid var(--accent
 footer {{ color:var(--muted); font-size:12.5px; text-align:center; padding:30px 0 }}
 </style></head>
 <body>
-<header><div class="brand">FlowTrim <span>docs · v0.2 · Apache-2.0</span></div><nav>{''.join(nav)}</nav></header>
+<header><div class="brand">FlowTrim <span>docs · v0.3.0 · MIT</span></div><nav>{''.join(nav)}</nav></header>
 <main>{''.join(sections)}
 <footer>Generated from the repository's Markdown (README.md and docs/). Edit those files, not this page.</footer></main>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>

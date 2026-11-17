@@ -10,6 +10,7 @@ package rules
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash/maphash"
 	"math"
 	"net/netip"
@@ -18,10 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/flow"
-	"github.com/tripnine/flowtrim/internal/netset"
-	"github.com/tripnine/flowtrim/internal/ocsf"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/flow"
+	"github.com/trip-nine/flowtrim/internal/netset"
+	"github.com/trip-nine/flowtrim/internal/ocsf"
 )
 
 // Decision labels (used in metrics).
@@ -49,6 +50,7 @@ type Engine struct {
 	rollupMatch *Matcher
 	prune       [][]string
 	scale       bool
+	samplingOv  []samplingOverride
 	emit        func(ocsf.Event)
 	hooks       Hooks
 	shadow      bool
@@ -91,6 +93,12 @@ type Engine struct {
 	dsCounts   map[string]*dropCount
 
 	keyBuf []byte
+}
+
+type samplingOverride struct {
+	set   *netset.Set
+	rate  uint64
+	force bool
 }
 
 type namedMatcher struct {
@@ -158,6 +166,13 @@ func New(cfg *config.Config, configDir string, emit func(ocsf.Event), hooks Hook
 		e.drop = append(e.drop, namedMatcher{r.Name, m})
 	}
 	e.scale = cfg.Normalize.ScaleBySamplingRate != nil && *cfg.Normalize.ScaleBySamplingRate
+	for _, o := range cfg.Normalize.SamplingOverrides {
+		s, err := netset.Parse([]string{o.Exporter})
+		if err != nil {
+			return nil, fmt.Errorf("normalize.sampling_overrides: %w", err)
+		}
+		e.samplingOv = append(e.samplingOv, samplingOverride{set: s, rate: o.Rate, force: o.Force})
+	}
 	for _, p := range cfg.Rules.PruneFields {
 		e.prune = append(e.prune, strings.Split(p, "."))
 	}
@@ -217,6 +232,16 @@ func (r *RuleError) Error() string { return "rules." + r.Group + " " + r.Name + 
 // Normalize applies sampling scaling and direction classification. Inputs call
 // it once per flow before Process.
 func (e *Engine) Normalize(f *flow.Flow) {
+	if !f.Scaled {
+		for _, o := range e.samplingOv {
+			if o.set.Contains(f.Exporter) {
+				if o.force || f.SamplingRate <= 1 {
+					f.SamplingRate = o.rate
+				}
+				break
+			}
+		}
+	}
 	if e.scale && f.SamplingRate > 1 && !f.Scaled {
 		f.Bytes *= f.SamplingRate
 		f.Packets *= f.SamplingRate

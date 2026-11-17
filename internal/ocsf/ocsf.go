@@ -4,10 +4,11 @@
 package ocsf
 
 import (
+	"net/netip"
 	"strings"
 	"time"
 
-	"github.com/tripnine/flowtrim/internal/flow"
+	"github.com/trip-nine/flowtrim/internal/flow"
 )
 
 // Version is the OCSF schema version the records are shaped after.
@@ -22,6 +23,22 @@ type Event struct {
 	// Shadow marks shadow-mode accounting: ShadowRaw = forwarded and counted
 	// as raw; ShadowReduced = counted as "enforce would send", never forwarded.
 	Shadow string
+	// Flow carries the typed flow keys the enrichment stage needs (nil for
+	// summary records).
+	Flow *FlowMeta
+}
+
+// FlowMeta is the typed identity of a (possibly rolled-up) flow record.
+type FlowMeta struct {
+	Src, Dst         netip.Addr
+	SrcPort, DstPort uint16
+	SrcPortValid     bool // false when a rollup folded several source ports
+	Proto            uint8
+	ICMPType         uint8
+	ICMPCode         uint8
+	Exporter         netip.Addr
+	InIf, OutIf      uint32
+	SrcAS, DstAS     uint32
 }
 
 // Shadow accounting markers.
@@ -207,7 +224,11 @@ func FromFlow(f *flow.Flow, start, end time.Time, bytes, packets uint64, tcpFlag
 	if kind == "none" || kind == "" {
 		kind = "raw"
 	}
-	return Event{Time: end, Host: f.HostLabel(), Kind: kind, Body: body}
+	meta := &FlowMeta{Src: f.Src, Dst: f.Dst, SrcPort: f.SrcPort, DstPort: f.DstPort,
+		SrcPortValid: red.Kind != "rollup" || red.SrcPorts <= 1, Proto: f.Proto,
+		ICMPType: f.ICMPType, ICMPCode: f.ICMPCode, Exporter: f.Exporter,
+		InIf: f.InIf, OutIf: f.OutIf, SrcAS: f.SrcAS, DstAS: f.DstAS}
+	return Event{Time: end, Host: f.HostLabel(), Kind: kind, Body: body, Flow: meta}
 }
 
 // Summary builds a FlowTrim summary record (drop_summary, fanout_summary,

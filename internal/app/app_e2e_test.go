@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tripnine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/config"
 )
 
 // freeUDP returns an unused UDP port on loopback.

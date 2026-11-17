@@ -1,0 +1,38 @@
+{
+  "duplicate_reexports": 7003,
+  "duration_s": 30,
+  "expected": {
+    "bypass:denied": "denied_inbound",
+    "bypass:lateral": "internal_smb_ssh_sweep (+ any internal 22/445 traffic)",
+    "bypass:threat_intel": "threat_intel_destination",
+    "dedup": "≈ duplicate_reexports (plus identical NTP/mDNS records inside 1 s)",
+    "drop:dns_to_corp": "dns_to_corp_resolvers",
+    "drop:multicast": "mdns_multicast",
+    "drop:ntp_to_corp": "ntp_to_corp_servers",
+    "fanout_summary": "1 per window for 10.1.9.9 (the sweeper)",
+    "raw": "web_egress (mostly unique pairs)",
+    "rollup": "east_west_api_chatter + beacon_c2_candidate (+ repeated egress pairs)"
+  },
+  "exporters": [
+    "192.0.2.1",
+    "192.0.2.2"
+  ],
+  "flows_on_wire": 31018,
+  "flows_unique": 24015,
+  "format": "v9",
+  "packets": 1568,
+  "patterns": {
+    "beacon_c2_candidate": 15,
+    "denied_inbound": 204,
+    "dns_to_corp_resolvers": 3635,
+    "east_west_api_chatter": 9649,
+    "internal_smb_ssh_sweep": 711,
+    "mdns_multicast": 1906,
+    "ntp_to_corp_servers": 1693,
+    "threat_intel_destination": 125,
+    "web_egress": 5792,
+    "web_egress_ipv6": 285
+  },
+  "rate_per_s": 800,
+  "seed": 11
+}

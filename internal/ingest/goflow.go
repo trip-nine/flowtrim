@@ -16,10 +16,10 @@ import (
 	"github.com/netsampler/goflow2/v2/utils"
 	"github.com/netsampler/goflow2/v2/utils/debug"
 
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/flow"
-	"github.com/tripnine/flowtrim/internal/netset"
-	"github.com/tripnine/flowtrim/internal/telemetry"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/flow"
+	"github.com/trip-nine/flowtrim/internal/netset"
+	"github.com/trip-nine/flowtrim/internal/telemetry"
 )
 
 // Sink receives normalized flows (blocking send = backpressure).

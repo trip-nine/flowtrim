@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tripnine/flowtrim/internal/config"
-	"github.com/tripnine/flowtrim/internal/flow"
-	"github.com/tripnine/flowtrim/internal/telemetry"
+	"github.com/trip-nine/flowtrim/internal/config"
+	"github.com/trip-nine/flowtrim/internal/flow"
+	"github.com/trip-nine/flowtrim/internal/telemetry"
 )
 
 // Firehose implements the Amazon Data Firehose HTTP endpoint delivery

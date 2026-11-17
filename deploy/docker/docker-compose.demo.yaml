@@ -1,31 +1,44 @@
-# Self-contained demo: FlowTrim (shadow mode) + mock NG-SIEM + traffic generator.
+# Full-chain demo in containers:
+#   flowgen (replays demo/samples/*.pcap) ─UDP─► flowtrim ─HEC─► onum (mock) ─HEC─► ngsiem (mock)
 #   docker compose -f deploy/docker/docker-compose.demo.yaml up --build
-#   then: curl -s localhost:9109/shadow   and   curl -s localhost:8088/stats
+#   Console: http://127.0.0.1:9109   ·   mock NG-SIEM events: http://127.0.0.1:8088/events?limit=5
+x-image: &image
+  build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
+  image: flowtrim:demo
 services:
-  mockhec:
-    build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
-    entrypoint: ["/usr/local/bin/mockhec", "-listen", "0.0.0.0:8088", "-token", "demo-token"]
-    ports: ["8088:8088"]
-
+  ngsiem:
+    <<: *image
+    entrypoint: ["/usr/local/bin/mockhec", "-role", "ngsiem", "-listen", "0.0.0.0:8088", "-token", "demo-token"]
+    ports: ["127.0.0.1:8088:8088"]
+  onum:
+    <<: *image
+    entrypoint: ["/usr/local/bin/mockhec", "-role", "onum", "-listen", "0.0.0.0:8089", "-token", "demo-token",
+                 "-forward", "http://ngsiem:8088/services/collector", "-forward-token", "demo-token"]
+    ports: ["127.0.0.1:8089:8089"]
+    depends_on: [ngsiem]
   flowtrim:
-    build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
+    <<: *image
+    command: ["run", "-config", "/demo/flowtrim-demo.yaml"]
     environment:
-      HEC_URL: http://mockhec:8088
+      FLOWTRIM_LISTEN: "0.0.0.0"
+      FLOWTRIM_UI: "0.0.0.0:9109"
+      FLOWTRIM_QUEUE: /var/lib/flowtrim/queue
+      HEC_URL: http://onum:8089
       HEC_TOKEN: demo-token
-    command: ["run", "-config", "/etc/flowtrim/demo.yaml"]
+      ONUM_STATS: http://onum:8089/stats
+      NGSIEM_STATS: http://ngsiem:8088/stats
     volumes:
-      - ./demo.yaml:/etc/flowtrim/demo.yaml:ro
-      - ../../examples/intel.txt:/etc/flowtrim/intel.txt:ro
+      - ../../demo:/demo:ro
       - flowtrim-queue:/var/lib/flowtrim
-    ports: ["9109:9109"]
+    ports: ["127.0.0.1:9109:9109"]
     sysctls:
-      net.core.rmem_max: 33554432   # allowed in a container's own netns on modern kernels
-    depends_on: [mockhec]
-
+      net.core.rmem_max: 33554432
+    depends_on: [onum]
   flowgen:
-    build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
-    entrypoint: ["/usr/local/bin/flowgen", "-target", "flowtrim:2055", "-rate", "3000", "-duration", "120s", "-dup-from", ""]
+    <<: *image
+    entrypoint: ["/usr/local/bin/flowgen", "replay", "-pcap", "/demo/samples/enterprise-mix.ipfix.pcap",
+                 "-target", "flowtrim:4739", "-loop", "0", "-bind", "none"]
+    volumes: ["../../demo:/demo:ro"]
     depends_on: [flowtrim]
-
 volumes:
   flowtrim-queue: {}

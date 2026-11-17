@@ -8,7 +8,7 @@
 
 ## 1.2 Is FlowTrim a full replacement for ElastiFlow?
 
-**No, and it isn't meant to be on its own.** ElastiFlow is a whole product: a collector, enrichment, storage integrations, and dashboards. In a CrowdStrike stack, those jobs split across three components. **FlowTrim + Onum + NG-SIEM together replace ElastiFlow**:
+**For collection, reduction and enrichment: yes** (see the [parity matrix](05-enrichment.md#51-parity-matrix)). For storage, search and dashboards: no, by design, because those belong to the SIEM. In a CrowdStrike stack, **FlowTrim + Onum + NG-SIEM together replace ElastiFlow**:
 
 | ElastiFlow capability | Who does it in this stack | Status |
 |---|---|---|
@@ -17,16 +17,19 @@
 | Decode templates, apply sampling rate | **FlowTrim** (goflow2 library) | ✅ Built |
 | Normalize to one schema | **FlowTrim** (OCSF Network Activity 4001 shape) | ✅ Built |
 | Reduce volume (dedup, drop, rollup) | **FlowTrim**. ElastiFlow only shrinks *storage* inside Elastic; it doesn't reduce what crosses the wire. | ✅ Built |
-| GeoIP / ASN enrichment | **Onum** (Lookup actions) or **NG-SIEM** at query time (`ipLocation()`, `asn()`) | Not in FlowTrim v0.1 (roadmap v0.4) |
-| Reverse DNS, SNMP interface names | **Onum** lookups, or FlowTrim later | Not built (roadmap v0.4) |
-| Threat-intel tagging | **NG-SIEM** (Falcon intel) / **Onum**. FlowTrim uses intel lists only to *protect* flows from reduction. | Partial (bypass lists) |
+| GeoIP / ASN enrichment | **FlowTrim** (any MMDB), or Onum / NG-SIEM if you prefer | ✅ Built (v0.3) |
+| Reverse DNS, user-defined hostnames and metadata | **FlowTrim** | ✅ Built (v0.3) |
+| SNMP / user-defined interface names | **FlowTrim** | ✅ Built (v0.3) |
+| Application ID, SaaS identification | **FlowTrim** (services + your app CIDR lists) | ✅ Built (v0.3) |
+| Threat-intel tagging | **FlowTrim** (any feed) and NG-SIEM (Falcon intel) | ✅ Built (v0.3) |
+| Community ID, client/server inference, IP obfuscation | **FlowTrim** | ✅ Built (v0.3) |
 | Routing to other destinations (S3, Kafka, other SIEMs) | **Onum** | n/a in FlowTrim by design |
 | Storage, search, dashboards, detections | **NG-SIEM** | n/a in FlowTrim by design |
-| Licensing per records/second | Nobody. FlowTrim is Apache-2.0 with no rate caps. | ✅ |
+| Licensing per records/second | Nobody. FlowTrim is MIT licensed, with no rate caps. | ✅ |
 
 ## 1.3 Is the main job enrichment or reduction?
 
-**Reduction and normalization.** Enrichment is deliberately *not* FlowTrim's main job.
+**Reduction first, then enrichment of what's left.** FlowTrim enriches only the reduced stream, so lookups scale with what you send, not with what you receive.
 
 | Job | FlowTrim | Onum | NG-SIEM |
 |---|---|---|---|
@@ -34,7 +37,8 @@
 | **Putting them in the right format** (OCSF shape, UTC times, scaled counters, direction) | **Owner** | Can re-map | Parser maps to CPS fields |
 | **Flow-aware reduction** (cross-router dedup, rollups that keep beaconing stats, sweep summaries, drop audit trail) | **Owner** | Generic filter/group/sample actions | — |
 | **Generic reduction** (dropping fields, sampling for a *secondary* destination) | Optional | **Owner** | — |
-| **Enrichment** (Geo, ASN, CMDB, identity) | — | **Owner** | Query-time functions |
+| **Flow enrichment** (Geo, ASN, DNS, interfaces, apps, Community ID) | **Owner** | Optional | Query-time functions |
+| **Org-wide context** (CMDB, identity, business tags shared with other sources) | Optional (metadata file) | **Owner** | — |
 | **Routing, masking, multi-destination** | — | **Owner** | — |
 | **Detection, search, retention** | — | — | **Owner** |
 

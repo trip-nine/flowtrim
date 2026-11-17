@@ -1,0 +1,6 @@
+- cidr: 10.1.0.0/16
+  tags: { site: dallas, zone: workstations, owner: it-endpoint }
+- cidr: 10.2.0.0/16
+  tags: { site: dallas, zone: datacenter, owner: platform }
+- cidr: 10.3.0.0/16
+  tags: { site: austin, zone: servers, owner: platform }

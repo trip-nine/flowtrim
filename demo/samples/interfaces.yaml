@@ -1,0 +1,20 @@
+192.0.2.1:
+  1: { name: Gi0/0/1, description: mgmt, speed_mbps: 1000 }
+  3: { name: Gi0/0/3, description: access-floor-3, speed_mbps: 10000 }
+  5: { name: Te0/0/5, description: core-dc1, speed_mbps: 10000 }
+  7: { name: Te0/1/0, description: uplink-isp-a, speed_mbps: 10000 }
+192.0.2.2:
+  3: { name: Gi1/0/3, description: access-floor-3, speed_mbps: 10000 }
+  5: { name: Te1/0/5, description: core-dc1, speed_mbps: 10000 }
+  7: { name: Te1/1/0, description: uplink-isp-b, speed_mbps: 10000 }
+# During a local replay the exporter address is the UDP source FlowTrim sees
+# (127.0.0.1 / 127.0.0.2), not the 192.0.2.x written in the capture.
+127.0.0.1:
+  1: { name: Gi0/0/1, description: mgmt, speed_mbps: 1000 }
+  3: { name: Gi0/0/3, description: access-floor-3, speed_mbps: 10000 }
+  5: { name: Te0/0/5, description: core-dc1, speed_mbps: 10000 }
+  7: { name: Te0/1/0, description: uplink-isp-a, speed_mbps: 10000 }
+127.0.0.2:
+  3: { name: Gi1/0/3, description: access-floor-3, speed_mbps: 10000 }
+  5: { name: Te1/0/5, description: core-dc1, speed_mbps: 10000 }
+  7: { name: Te1/1/0, description: uplink-isp-b, speed_mbps: 10000 }

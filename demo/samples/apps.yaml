@@ -1,0 +1,3 @@
+# app name -> CIDRs (example ranges; replace with your SaaS providers' published ranges)
+Example CDN: [93.184.0.0/21]
+Example SaaS: ["2001:db8::/32"]

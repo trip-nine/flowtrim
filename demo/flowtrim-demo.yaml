@@ -1,0 +1,41 @@
+# FlowTrim demo config: the full chain on one machine.
+#   flowgen replay ─UDP 4739─► FlowTrim ─HEC─► mock Onum :8089 ─HEC─► mock NG-SIEM :8088
+# Console: http://127.0.0.1:9109
+mode: shadow
+log_level: info
+inputs:
+  netflow:
+    listen: ["${FLOWTRIM_LISTEN:-127.0.0.1}:2055", "${FLOWTRIM_LISTEN:-127.0.0.1}:4739"]
+rules:
+  bypass:
+    - { name: threat_intel, match: { any_ip_in_list: intel.txt } }
+    - { name: denied_traffic, match: { action: [REJECT, DENY] } }
+    - { name: lateral_movement_ports, match: { direction: [internal], dst_port: ["22", "135", "139", "445", "3389", "5985-5986"] } }
+  drop:
+    - { name: multicast_broadcast, match: { dst_cidr: ["224.0.0.0/4", "255.255.255.255/32", "ff00::/8"] } }
+    - { name: dns_to_corp_resolvers, match: { proto: [udp], dst_port: ["53"], dst_cidr: ["10.0.0.53/32"] } }
+    - { name: ntp_to_corp_servers, match: { proto: [udp], dst_port: ["123"], dst_cidr: ["10.0.0.123/32"] } }
+  dedup: { enabled: true }
+  rollup: { enabled: true, window: 30s, match: { direction: [internal, outbound] } }
+  fanout: { enabled: true, window: 30s }
+  drop_summary: { interval: 30s }
+enrich:
+  geoip: { city_db: samples/demo-city.mmdb, asn_db: samples/demo-asn.mmdb }
+  hostnames_file: samples/hostnames.yaml
+  metadata_file: samples/metadata.yaml
+  interfaces: { file: samples/interfaces.yaml }
+  apps: { apps_file: samples/apps.yaml }
+  threat_lists: [ { name: demo-feed, file: intel.txt, severity: high } ]
+output:
+  hec:
+    target: onum
+    url: "${HEC_URL:-http://127.0.0.1:8089}"
+    token: "${HEC_TOKEN:-demo-token}"
+    batch: { max_wait: 1s }
+    queue: { dir: "${FLOWTRIM_QUEUE:-/tmp/flowtrim-demo/queue}" }
+telemetry:
+  listen: "${FLOWTRIM_UI:-127.0.0.1:9109}"
+  shadow_report_interval: 30s
+  downstream:
+    - { name: "Falcon Onum (mock)", role: onum, stats_url: "${ONUM_STATS:-http://127.0.0.1:8089/stats}" }
+    - { name: "Falcon NG-SIEM (mock)", role: ngsiem, stats_url: "${NGSIEM_STATS:-http://127.0.0.1:8088/stats}" }

@@ -30,6 +30,8 @@ type Config struct {
 	Inputs    Inputs    `yaml:"inputs"`
 	Normalize Normalize `yaml:"normalize"`
 	Rules     Rules     `yaml:"rules"`
+	Enrich    Enrich    `yaml:"enrich"`
+	Privacy   Privacy   `yaml:"privacy"`
 	Output    Output    `yaml:"output"`
 	Telemetry Telemetry `yaml:"telemetry"`
 
@@ -73,7 +75,120 @@ type FirehoseInput struct {
 
 // Normalize controls record normalization.
 type Normalize struct {
-	ScaleBySamplingRate *bool `yaml:"scale_by_sampling_rate"`
+	ScaleBySamplingRate *bool              `yaml:"scale_by_sampling_rate"`
+	SamplingOverrides   []SamplingOverride `yaml:"sampling_overrides"`
+}
+
+// SamplingOverride sets the sampling rate for exporters that don't report
+// one (or always, with force).
+type SamplingOverride struct {
+	Exporter string `yaml:"exporter"` // IP or CIDR
+	Rate     uint64 `yaml:"rate"`
+	Force    bool   `yaml:"force"`
+}
+
+// Enrich adds context to records after reduction (so only the reduced
+// stream is enriched). Every block is optional.
+type Enrich struct {
+	GeoIP         GeoIP        `yaml:"geoip"`
+	DNS           DNS          `yaml:"dns"`
+	HostnamesFile string       `yaml:"hostnames_file"` // YAML map: ip -> hostname (wins over DNS)
+	MetadataFile  string       `yaml:"metadata_file"`  // YAML list: {cidr, tags{}}
+	Interfaces    Interfaces   `yaml:"interfaces"`
+	Apps          Apps         `yaml:"apps"`
+	Threat        []ThreatList `yaml:"threat_lists"`
+	CommunityID   CommunityID  `yaml:"community_id"`
+	ClientServer  *bool        `yaml:"client_server"`
+	Scope         EnrichScope  `yaml:"scope"`
+}
+
+// GeoIP uses MMDB files: MaxMind GeoLite2/GeoIP2, DB-IP Lite, or IPinfo Lite.
+type GeoIP struct {
+	CityDB       string `yaml:"city_db"`
+	ASNDB        string `yaml:"asn_db"`
+	SkipInternal *bool  `yaml:"skip_internal"`
+}
+
+// DNS is asynchronous reverse-DNS enrichment with a cache.
+type DNS struct {
+	Enabled     bool     `yaml:"enabled"`
+	Nameserver  string   `yaml:"nameserver"` // host:port; empty = system resolver
+	Timeout     Duration `yaml:"timeout"`
+	CacheTTL    Duration `yaml:"cache_ttl"`
+	NegativeTTL Duration `yaml:"negative_ttl"`
+	MaxEntries  int      `yaml:"max_entries"`
+	Workers     int      `yaml:"workers"`
+	Queue       int      `yaml:"queue"`
+	Include     []string `yaml:"include_cidrs"` // "internal" = networks.internal; empty = internal only
+	Exclude     []string `yaml:"exclude_cidrs"`
+}
+
+// EnrichScope limits GeoIP/metadata lookups (DNS has its own include/exclude).
+type EnrichScope struct {
+	ExcludeCIDRs []string `yaml:"exclude_cidrs"`
+}
+
+// Interfaces maps exporter ifIndex to names, from a file and/or SNMP.
+type Interfaces struct {
+	File string `yaml:"file"` // YAML: exporter_ip -> ifindex -> {name, description, speed_mbps}
+	SNMP SNMP   `yaml:"snmp"`
+}
+
+// SNMP polls IF-MIB on exporters.
+type SNMP struct {
+	Enabled   bool     `yaml:"enabled"`
+	Version   string   `yaml:"version"` // 2c | 3
+	Community string   `yaml:"community"`
+	Port      int      `yaml:"port"`
+	Timeout   Duration `yaml:"timeout"`
+	Retries   int      `yaml:"retries"`
+	Interval  Duration `yaml:"interval"`
+	Exporters []string `yaml:"exporters"` // empty = every exporter seen
+	V3        SNMPv3   `yaml:"v3"`
+}
+
+// SNMPv3 USM credentials.
+type SNMPv3 struct {
+	User      string `yaml:"user"`
+	Level     string `yaml:"level"`      // noAuthNoPriv | authNoPriv | authPriv
+	AuthProto string `yaml:"auth_proto"` // SHA | SHA256 | SHA512 | MD5
+	AuthPass  string `yaml:"auth_pass"`
+	PrivProto string `yaml:"priv_proto"` // AES | AES256 | DES
+	PrivPass  string `yaml:"priv_pass"`
+}
+
+// Apps names services (by port) and SaaS/business apps (by CIDR).
+type Apps struct {
+	Services     *bool  `yaml:"services"`      // built-in port -> service names
+	ServicesFile string `yaml:"services_file"` // YAML map: "tcp/8443" -> name (overrides built-ins)
+	AppsFile     string `yaml:"apps_file"`     // YAML map: app name -> [cidr, ...]
+}
+
+// ThreatList tags flows touching listed IPs (it does not drop or bypass;
+// use rules.bypass with the same file for that).
+type ThreatList struct {
+	Name     string `yaml:"name"`
+	File     string `yaml:"file"`
+	Severity string `yaml:"severity"` // low | medium | high | critical
+}
+
+// CommunityID computes the Community ID v1 flow hash (Zeek/Suricata compatible).
+type CommunityID struct {
+	Enabled *bool  `yaml:"enabled"`
+	Seed    uint16 `yaml:"seed"`
+}
+
+// Privacy pseudonymizes addresses before they leave FlowTrim.
+type Privacy struct {
+	Key          string        `yaml:"key"` // HMAC key for mode: hash (use ${FLOWTRIM_PSEUDO_KEY})
+	Pseudonymize []PrivacyRule `yaml:"pseudonymize"`
+}
+
+// PrivacyRule applies to IPs inside CIDR.
+type PrivacyRule struct {
+	CIDR string `yaml:"cidr"`
+	Mode string `yaml:"mode"` // hash | truncate
+	Bits int    `yaml:"bits"` // truncate: keep this many prefix bits (default 24 v4 / 48 v6)
 }
 
 // Rules is the reduction policy, applied in this fixed order:
@@ -226,8 +341,18 @@ type Queue struct {
 
 // Telemetry configures the metrics/health HTTP server.
 type Telemetry struct {
-	Listen         string   `yaml:"listen"`
-	ShadowInterval Duration `yaml:"shadow_report_interval"`
+	Listen         string       `yaml:"listen"`
+	ShadowInterval Duration     `yaml:"shadow_report_interval"`
+	UI             *bool        `yaml:"ui"` // serve the FlowTrim Console at / (default true)
+	Downstream     []Downstream `yaml:"downstream"`
+}
+
+// Downstream is a next hop whose stats the console may show. Real Onum and
+// NG-SIEM endpoints don't expose these; the demo's mock receivers do.
+type Downstream struct {
+	Name     string `yaml:"name"`
+	Role     string `yaml:"role"` // onum | ngsiem
+	StatsURL string `yaml:"stats_url"`
 }
 
 var envRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}`)
@@ -309,6 +434,61 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Normalize.ScaleBySamplingRate == nil {
 		c.Normalize.ScaleBySamplingRate = boolp(true)
+	}
+	e := &c.Enrich
+	if e.GeoIP.SkipInternal == nil {
+		e.GeoIP.SkipInternal = boolp(true)
+	}
+	if e.DNS.Timeout == 0 {
+		e.DNS.Timeout = Duration(time.Second)
+	}
+	if e.DNS.CacheTTL == 0 {
+		e.DNS.CacheTTL = Duration(time.Hour)
+	}
+	if e.DNS.NegativeTTL == 0 {
+		e.DNS.NegativeTTL = Duration(5 * time.Minute)
+	}
+	if e.DNS.MaxEntries == 0 {
+		e.DNS.MaxEntries = 500_000
+	}
+	if e.DNS.Workers == 0 {
+		e.DNS.Workers = 8
+	}
+	if e.DNS.Queue == 0 {
+		e.DNS.Queue = 10_000
+	}
+	if len(e.DNS.Include) == 0 {
+		e.DNS.Include = []string{"internal"}
+	}
+	s := &e.Interfaces.SNMP
+	if s.Version == "" {
+		s.Version = "2c"
+	}
+	if s.Port == 0 {
+		s.Port = 161
+	}
+	if s.Timeout == 0 {
+		s.Timeout = Duration(2 * time.Second)
+	}
+	if s.Retries == 0 {
+		s.Retries = 1
+	}
+	if s.Interval == 0 {
+		s.Interval = Duration(15 * time.Minute)
+	}
+	if e.Apps.Services == nil {
+		e.Apps.Services = boolp(true)
+	}
+	if e.CommunityID.Enabled == nil {
+		e.CommunityID.Enabled = boolp(true)
+	}
+	if e.ClientServer == nil {
+		e.ClientServer = boolp(true)
+	}
+	for i := range c.Privacy.Pseudonymize {
+		if c.Privacy.Pseudonymize[i].Mode == "" {
+			c.Privacy.Pseudonymize[i].Mode = "hash"
+		}
 	}
 	d := &c.Rules.Dedup
 	if len(d.Key) == 0 {
@@ -423,6 +603,9 @@ func (c *Config) applyDefaults() {
 	if c.Telemetry.Listen == "" {
 		c.Telemetry.Listen = "127.0.0.1:9109"
 	}
+	if c.Telemetry.UI == nil {
+		c.Telemetry.UI = boolp(true)
+	}
 	if c.Telemetry.ShadowInterval == 0 {
 		c.Telemetry.ShadowInterval = Duration(5 * time.Minute)
 	}
@@ -497,6 +680,38 @@ func (c *Config) Validate() error {
 			if grp.n == "drop" && r.Match.IsEmpty() {
 				add("rules.drop[%d] %q: empty match would drop ALL traffic; refusing", i, r.Name)
 			}
+		}
+	}
+	if sn := c.Enrich.Interfaces.SNMP; sn.Enabled {
+		switch sn.Version {
+		case "2c":
+			if sn.Community == "" {
+				add("enrich.interfaces.snmp.community is required for version 2c (use ${SNMP_COMMUNITY})")
+			}
+		case "3":
+			if sn.V3.User == "" {
+				add("enrich.interfaces.snmp.v3.user is required for version 3")
+			}
+		default:
+			add("enrich.interfaces.snmp.version must be 2c or 3")
+		}
+	}
+	for i, t := range c.Enrich.Threat {
+		if t.Name == "" || t.File == "" {
+			add("enrich.threat_lists[%d]: name and file are required", i)
+		}
+	}
+	for i, p := range c.Privacy.Pseudonymize {
+		if p.Mode != "hash" && p.Mode != "truncate" {
+			add("privacy.pseudonymize[%d].mode must be hash or truncate", i)
+		}
+		if p.Mode == "hash" && len(c.Privacy.Key) < 16 {
+			add("privacy.key must be at least 16 characters for mode: hash (use ${FLOWTRIM_PSEUDO_KEY})")
+		}
+	}
+	for i, o := range c.Normalize.SamplingOverrides {
+		if o.Exporter == "" || o.Rate == 0 {
+			add("normalize.sampling_overrides[%d]: exporter and rate are required", i)
 		}
 	}
 	if c.Output.HEC != nil && c.Output.LegacyNGSIEM != nil && c.Output.HEC != c.Output.LegacyNGSIEM {

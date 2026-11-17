@@ -1,145 +1,207 @@
+<div align="center">
+
 # FlowTrim
 
-**Collect flow logs, keep the signal, cut the volume, and ship the rest over HTTPS to Falcon Onum or straight to Falcon Next-Gen SIEM.**
+**Collect every flow. Keep the signal. Ship a fraction.**
 
-FlowTrim is a single Go binary with one YAML file. It receives NetFlow v5/v9, IPFIX, sFlow v5 and AWS VPC Flow Logs (via Amazon Data Firehose). It then deduplicates, drops known-boring traffic and rolls up chatty conversations, while keeping the statistics that detections need. The result goes to the **Falcon Next-Gen SIEM HEC/HTTP Event Data Connector** as OCSF-shaped JSON.
+An open-source flow-log collector, reducer and enricher. It receives NetFlow, IPFIX, sFlow and AWS VPC Flow Logs, removes the volume that carries no security value, enriches what's left, and delivers it over HTTPS to **Falcon Onum** or directly to **Falcon Next-Gen SIEM**.
 
-> Think of FlowTrim as a strainer on the tap: it keeps the gravel out of the pipe and lets the water through. It does not replace the treatment plant (your SIEM).
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.24+-00ADD8.svg)](go.mod)
+[![Version](https://img.shields.io/badge/version-0.3.0-6d5efc.svg)](CHANGELOG.md)
+[![CI](https://github.com/trip-nine/flowtrim/actions/workflows/ci.yml/badge.svg)](https://github.com/trip-nine/flowtrim/actions/workflows/ci.yml)
 
+![FlowTrim Console](docs/img/console-overview.png)
+
+</div>
+
+---
+
+## Contents
+
+- [Why FlowTrim](#why-flowtrim)
+- [How it works](#how-it-works)
+- [Quick start (2-minute demo)](#quick-start-2-minute-demo)
+- [The console](#the-console)
+- [Production in 7 steps](#production-in-7-steps)
+- [Sizing](#sizing)
+- [FlowTrim vs ElastiFlow](#flowtrim-vs-elastiflow)
+- [Documentation](#documentation)
+- [Versioning and releases](#versioning-and-releases)
+- [License, trademarks, disclaimer](#license-trademarks-disclaimer)
+
+---
+
+## Why FlowTrim
+
+Flow logs are some of the most useful network telemetry a SOC can have, and some of the most expensive to keep. Most of the volume is the same conversations repeated, the same flow exported by every router on the path, and housekeeping traffic nobody investigates.
+
+| Problem | What FlowTrim does |
+|---|---|
+| Every router on the path exports the same flow | **Dedup** across exporters, with clock-skew tolerance |
+| DNS/NTP to your own servers, multicast, health checks | **Drop** rules, with a `drop_summary` audit record for every rule |
+| Chatty internal conversations (thousands of short flows) | **Rollup** into one record per window that keeps counts, totals, TCP flags and **connection timing** (so beaconing stays visible) |
+| Scans hidden by aggregation | **Fanout summaries** per source (distinct destinations and ports) |
+| Fear of dropping something important | **Bypass** rules (intel hits, denies, lateral-movement ports) are never reduced. **Shadow mode** measures savings before anything is dropped. |
+| Flow IPs mean nothing to an analyst | **Enrichment**: GeoIP/ASN, hostnames, interface names (SNMP), services, SaaS apps, threat tags, Community ID |
+| Onum Cloud has no NetFlow listener | FlowTrim is the **UDP → HTTPS bridge** |
+| Free collectors cap you at 500–4,000 records/s | **No rate caps.** MIT licensed. Zero loss at 200k flows/s on 2 vCPUs in the lab. |
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph SRC["Sources"]
+    A["Routers / firewalls<br/>NetFlow v5/v9 · IPFIX"]
+    B["Switches / hypervisors<br/>sFlow v5"]
+    C["AWS VPC Flow Logs<br/>via Data Firehose"]
+  end
+  subgraph FT["FlowTrim"]
+    direction TB
+    I["Ingest<br/>32 MiB socket buffers"] --> N["Normalize<br/>UTC · sampling · direction"]
+    N --> D["Dedup"] --> BY["Bypass ✓ never reduced"] --> DR["Drop + audit"] --> R["Rollup<br/>keeps timing stats"]
+    R --> E["Enrich<br/>geo · ASN · DNS · SNMP · apps · intel"] --> Q[("Disk queue<br/>gzip HEC batches")]
+  end
+  A & B --> I
+  C --> I
+  Q -->|"HTTPS · HEC"| ON["Falcon Onum<br/>(optional)"] -->|"NG-SIEM Data Sink"| NG[("Falcon NG-SIEM")]
+  Q -.->|"HTTPS · HEC (direct)"| NG
 ```
- Routers / switches / probes ──UDP 2055/4739/6343──┐
-                                                    ├─► FlowTrim ──HTTPS (gzip, batched)──► Falcon NG-SIEM
- AWS VPC Flow Logs ─► Data Firehose ─HTTPS 8443────┘   dedup → bypass → drop → rollup       HEC/HTTP Event Data Connector
-                                                         fanout + drop summaries
-                                                         disk queue, retries, /metrics
-```
 
-## Why another flow collector?
+**FlowTrim + Onum + NG-SIEM** together replace ElastiFlow. FlowTrim does the flow-aware work at the edge. Onum routes, masks and adds org-wide context. NG-SIEM stores, searches and detects. See [docs/01-overview.md](docs/01-overview.md) for layouts and the reasoning behind them.
 
-| | ElastiFlow (Community / Basic) | **FlowTrim** |
-|---|---|---|
-| License | Proprietary freeware EULA | **Apache-2.0** |
-| Rate cap | 500 / 4,000 records/s, single instance | **None.** Measured with zero loss at 200k flows/s on 2 vCPUs ([benchmarks](docs/BENCHMARKS.md)) |
-| Config | Dozens of `EF_*` env vars | **One YAML file**, strict validation, `flowtrim check` |
-| Purpose | Enrich and store in Elastic/OpenSearch/Splunk | **Reduce before the SIEM**, then forward to NG-SIEM over HTTPS |
-| Safety net | n/a | **Shadow mode** measures savings before anything is dropped |
-| Audit trail | n/a | Every drop rule emits a **`drop_summary`** record into the SIEM |
+## Quick start (2-minute demo)
 
-FlowTrim does **not** try to match ElastiFlow on dashboards, 6,900 vendor information elements, or ML.
-
-## How reduction works (and what it never touches)
-
-Every flow goes through the stages in a fixed order:
-
-| # | Stage | What it does | Detection safeguard |
-|---|---|---|---|
-| 1 | **Dedup** | Drops exact duplicates: the same flow exported by several routers on the path, with ±1 s clock-skew tolerance | Fails open when full: never drops because it is out of memory |
-| 2 | **Bypass** | Forwards raw and **never reduces**: threat-intel hits, denied traffic, lateral-movement ports | Bypass always beats drop |
-| 3 | **Drop** | Discards known-boring traffic you list (multicast, DNS/NTP to *your* servers, AWS `NODATA`) | Per-rule `drop_summary` counts flows/bytes/packets every interval |
-| 4 | **Rollup** | Folds one conversation per window into one record | Keeps first/last seen, flow count, byte/packet sums, TCP-flag union, **inter-arrival min/max/mean/stddev** (beaconing), distinct src ports |
-| — | **Fanout** | Per-source summary when a host touches ≥ N distinct IPs/ports | Scan and sweep visibility that survives rollup |
-
-The **golden rule**: reduction only applies to traffic you have *named* as boring. Unknown, denied, rare or intel-matched traffic passes through raw.
-
-## Quick start (local demo, no tenant needed)
-
-The block below builds everything, starts a mock NG-SIEM endpoint, runs FlowTrim in shadow mode, sends 15 seconds of synthetic traffic, and prints the projected savings. Copy the whole box, from the first line to the last, into a terminal:
+This runs the whole chain on your laptop: sample IPFIX traffic → FlowTrim → mock Onum → mock NG-SIEM, with the live console. Copy the entire box, from the first line to the last:
 
 ```bash
 bash <<'FLOWTRIM_DEMO'
 set -euo pipefail
-REPO="$HOME/src/flowtrim"          # where you cloned/unzipped FlowTrim
+REPO="$HOME/src/flowtrim"
+if [ -d "$REPO/.git" ]; then git -C "$REPO" pull --ff-only; else git clone https://github.com/trip-nine/flowtrim "$REPO"; fi
 cd "$REPO"
-go build -o bin/ ./cmd/...
-mkdir -p /tmp/flowtrim-demo && cp examples/intel.txt /tmp/flowtrim-demo/
-sed -e 's#/var/lib/flowtrim/queue#/tmp/flowtrim-demo/queue#' \
-    -e 's#\["0.0.0.0:2055", "0.0.0.0:4739"\]#["127.0.0.1:2055"]#' \
-    -e 's#"0.0.0.0:9109"#"127.0.0.1:9109"#' \
-    -e 's#window: 60s#window: 5s#g' -e 's#shadow_report_interval: 5m#shadow_report_interval: 10s#' \
-    examples/flowtrim.yaml > /tmp/flowtrim-demo/flowtrim.yaml
-export HEC_URL=http://127.0.0.1:8088 HEC_TOKEN=test-token
-./bin/mockhec >/tmp/flowtrim-demo/mock.log 2>&1 & MOCK=$!
-./bin/flowtrim -config /tmp/flowtrim-demo/flowtrim.yaml 2>/tmp/flowtrim-demo/flowtrim.log & FT=$!
-trap 'kill $FT $MOCK 2>/dev/null || true' EXIT
-sleep 1
-./bin/flowgen -rate 3000 -duration 15s
-sleep 7
-echo "=== Projected reduction (shadow mode) ==="
-curl -s 127.0.0.1:9109/shadow
+./demo/run-demo.sh
 FLOWTRIM_DEMO
 ```
 
-## Where FlowTrim fits
+Open **http://127.0.0.1:9109**. Press Ctrl-C to stop. It needs Go 1.24+. Alternatively, unpack a [release archive](https://github.com/trip-nine/flowtrim/releases) and run `./demo/run-demo.sh` from inside it, or use Docker: `docker compose -f deploy/docker/docker-compose.demo.yaml up --build`.
 
-FlowTrim is **not** a one-box ElastiFlow clone. With the CrowdStrike stack, **FlowTrim + Falcon Onum + Falcon NG-SIEM** together cover what ElastiFlow does:
+The sample captures in [`demo/samples/`](demo/README.md) open in Wireshark, and each comes with a ground-truth manifest.
 
-| Job | Owner |
+## The console
+
+The console is built into the binary and served at the telemetry port. If no FlowTrim is reachable (for example, when the page is opened as a file), it runs on a realistic simulation instead.
+
+| Overview and live pipeline | End-to-end walkthrough |
 |---|---|
-| Get flows off the wire without loss; normalize; **flow-aware reduction** | **FlowTrim** |
-| Enrichment, routing, masking, other destinations | **Falcon Onum** (optional) |
-| Storage, search, dashboards, detections | **Falcon NG-SIEM** |
+| ![Overview](docs/img/console-overview.png) | ![Walkthrough](docs/img/console-walkthrough.png) |
+| **Rules & reduction** | **Enrichment & ElastiFlow parity** |
+| ![Rules](docs/img/console-rules.png) | ![Enrichment](docs/img/console-enrichment.png) |
+| **Record inspector (input next to output)** | **Sizing calculator** |
+| ![Records](docs/img/console-records.png) | ![Sizing](docs/img/console-sizing.png) |
 
-| Layout | Flow | Profile |
+## Production in 7 steps
+
+| # | Step | Details |
 |---|---|---|
-| **A** (recommended with Onum) | exporters → FlowTrim → Onum HEC Listener → NG-SIEM | `examples/profiles/onum-onprem.yaml`, `onum-cloud.yaml` |
-| **C** (no Onum) | exporters → FlowTrim → NG-SIEM HEC connector | `examples/profiles/ngsiem-direct.yaml` |
-| Collector-only | exporters → FlowTrim (no reduction) → Onum does all reduction | `examples/profiles/collector-only.yaml` |
+| 1 | Size it | Use the console's **Sizing calculator** or [the table below](#sizing) |
+| 2 | Install | Binary + systemd, or Docker ([02 Setup](docs/02-setup.md#22-install)) |
+| 3 | Prepare the receiver | An **Onum HEC Listener** wired to an NG-SIEM Data Sink (event format **Raw**), or an **NG-SIEM HEC/HTTP Event Data Connector** |
+| 4 | Configure | Copy a profile from `examples/profiles/`, put `HEC_URL` and `HEC_TOKEN` in the environment, run `flowtrim check` |
+| 5 | Point exporters | IPFIX → UDP 4739, NetFlow → 2055, sFlow → 6343 ([exporter examples](docs/02-setup.md#25-point-exporters-at-flowtrim)) |
+| 6 | Shadow week | Everything is forwarded unreduced. Read the projected savings in the console or at `/shadow`, and tune rules (`systemctl reload flowtrim`). |
+| 7 | Enforce | After SOC sign-off, set `mode: enforce` and restart |
 
-Diagrams and the reasoning behind them are in [docs/01-overview.md](docs/01-overview.md).
-
-## Production setup (summary)
-
-1. Prepare the receiver: an NG-SIEM HEC/HTTP Event Data Connector (API URL and key), **or** an Onum HEC Listener wired to an NG-SIEM Data Sink.
-2. Install FlowTrim (binary + systemd, or Docker), copy the profile for your layout, and put `HEC_URL` and `HEC_TOKEN` in the environment.
-3. Run `flowtrim check`, then start in `mode: shadow` and leave it for a week.
-4. Tune using `/shadow` and the `drop_summary` records, then switch to `mode: enforce`.
-
-Full walkthrough: [docs/02-setup.md](docs/02-setup.md).
-
-## Output format
-
-Each record is an HEC envelope (the example below is illustrative). `time` is the flow end in epoch seconds. The `event` is shaped as OCSF Network Activity (`class_uid` 4001):
-
-```json
-{"time":1763251259.877,"host":"192.0.2.1","source":"flowtrim","event":{
-  "class_uid":4001,"activity_id":6,"type_uid":400106,"count":30,
-  "start_time":1763251200123,"end_time":1763251259877,
-  "src_endpoint":{"ip":"10.1.5.5"},"dst_endpoint":{"ip":"203.0.113.66","port":443},
-  "connection_info":{"protocol_num":6,"protocol_name":"tcp","direction":"Outbound","tcp_flags":27},
-  "traffic":{"bytes":24600,"packets":180},"device":{"ip":"192.0.2.1"},
-  "unmapped":{"flowtrim":{"reduction":"rollup","flow_count":30,"distinct_src_ports":30,
-    "iat_ms":{"samples":30,"min":1995,"max":2010,"mean":2000.2,"stddev":4.1},
-    "flow_type":"NETFLOW_V9","direction":"outbound","rule_version":"e3594e602653"}}}}
+```yaml
+# minimal production config (Layout A: FlowTrim → Onum → NG-SIEM)
+mode: shadow
+inputs:
+  netflow: { listen: ["0.0.0.0:2055", "0.0.0.0:4739"], allowed_exporters: ["192.0.2.0/24"] }
+rules:
+  bypass: [ { name: denied, match: { action: [REJECT, DENY] } } ]
+  drop:   [ { name: multicast, match: { dst_cidr: ["224.0.0.0/4", "ff00::/8"] } } ]
+  dedup:  { enabled: true }
+  rollup: { enabled: true, match: { direction: [internal, outbound] } }
+  fanout: { enabled: true }
+enrich:
+  geoip: { city_db: /etc/flowtrim/dbip-city-lite.mmdb, asn_db: /etc/flowtrim/dbip-asn-lite.mmdb }
+output:
+  hec: { target: onum, url: "${HEC_URL}", token: "${HEC_TOKEN}", queue: { dir: /var/lib/flowtrim/queue } }
+telemetry: { listen: "0.0.0.0:9109" }
 ```
 
-`unmapped.flowtrim.reduction` is one of `none`, `bypass` or `rollup`. Summary records carry `unmapped.flowtrim.record_type`, which is one of `drop_summary`, `fanout_summary` or `shadow_report`.
+## Sizing
 
-## Observability
+| Peak flows/s (p99) | Instances | Per instance | Disk queue (8 h) |
+|---|---|---|---|
+| ≤ 20k | 1 | 2 vCPU · 2 GB | 20 GB |
+| 20k–100k | 1 (+1 HA) | 4 vCPU · 4 GB | 50 GB |
+| 100k–300k | 1–2 (+1 HA) | 6–8 vCPU · 4–8 GB | 100 GB |
+| > 300k | ⌈peak ÷ 300k⌉ (+1 HA) | 8 vCPU · 8 GB | 100–200 GB |
 
-| Endpoint | Purpose |
-|---|---|
-| `/metrics` | Prometheus: `flowtrim_flows_received_total`, `flowtrim_decisions_total{decision,rule}`, `flowtrim_output_*`, `flowtrim_queue_*`, `flowtrim_shadow_*`, plus goflow2 template/decoder metrics |
-| `/shadow` | JSON projected-savings report (shadow mode) |
-| `/healthz`, `/readyz` | Liveness and readiness |
+The formulas and a worked example are in [docs/00-quickstart.md](docs/00-quickstart.md#right-sizing). The demo needs about ¼ of a core and 250 MB of RAM.
 
-The most useful alerts: `rate(flowtrim_flows_rejected_total[5m]) > 0`, `flowtrim_queue_bytes` growing, `flowtrim_output_batches_total{result="auth_error"}`, and `flowtrim_output_events_lost_total`.
+## FlowTrim vs ElastiFlow
+
+| | ElastiFlow (Community / Basic) | FlowTrim |
+|---|---|---|
+| License | Proprietary EULA | **MIT** |
+| Rate limit | 500 / 4,000 records/s, single instance | **None** |
+| Configuration | Dozens of `EF_*` environment variables | **One YAML file**, strict validation, `flowtrim check` |
+| Protocols | NetFlow, IPFIX, sFlow, cloud flow logs | NetFlow v5/v9, IPFIX, sFlow v5, AWS VPC (Firehose) |
+| Enrichment | GeoIP, ASN, DNS, SNMP, app ID, NetIntel, metadata | GeoIP, ASN, DNS, SNMP, services and SaaS apps, any threat feed, metadata, Community ID, client/server, pseudonymization ([parity matrix](docs/05-enrichment.md#51-parity-matrix)) |
+| Volume reduction before the SIEM | Storage-side (Elastic TSDS) | **Stream-side**: dedup, drop with audit, rollup with timing stats, fanout |
+| Safety net | — | **Shadow mode** and projected savings |
+| Destinations | Elastic, OpenSearch, Splunk, Kafka, … | **Falcon Onum**, **Falcon NG-SIEM**, any HEC receiver |
+| Dashboards | Kibana / OpenSearch / Splunk | Built-in console, plus NG-SIEM for search and detections |
 
 ## Documentation
 
 | Doc | For |
 |---|---|
-| [01 Overview](docs/01-overview.md) | What FlowTrim is, the ElastiFlow capability map, layouts, diagrams |
-| [02 Setup](docs/02-setup.md) | Install, receiver setup (NG-SIEM / Onum), exporter configs, verification, go-live |
-| [03 User guide](docs/03-user-guide.md) | Modes, reading records, NG-SIEM searches, operations, alerts, troubleshooting |
+| [00 Quick start](docs/00-quickstart.md) | Demo, diagrams, right-sizing, demo sizing |
+| [01 Overview](docs/01-overview.md) | What FlowTrim is, layouts with Onum and NG-SIEM, delivery guarantees |
+| [02 Setup](docs/02-setup.md) | Install, receiver setup, exporter configs, verification, go-live |
+| [03 User guide](docs/03-user-guide.md) | Modes, reading records, NG-SIEM searches, alerts, troubleshooting |
 | [04 Configuration](docs/04-configuration.md) | Every key, type and default |
+| [05 Enrichment](docs/05-enrichment.md) | Enrichment modules, ElastiFlow parity, free data sources |
+| [Demo package](demo/README.md) | Sample captures, manifests, replaying into real receivers |
 | [Rules playbook](docs/RULES.md) | Match syntax and tuning |
-| [Plan and unknowns](docs/PLAN.md) | Roadmap and the risks and unknowns register |
+| [Plan and unknowns](docs/PLAN.md) | Roadmap, and the risks and unknowns register |
 | [Benchmarks](docs/BENCHMARKS.md) | What was measured and how |
 
-## Status
+## Versioning and releases
 
-`v0.1.0` (MVP). Tested against a local HEC mock. **Not yet validated against a live NG-SIEM tenant.** See the first items of the unknowns register in [docs/PLAN.md](docs/PLAN.md).
+- [Semantic Versioning](https://semver.org/). The current version is in [`VERSION`](VERSION), and changes are listed in [`CHANGELOG.md`](CHANGELOG.md).
+- Tags `vX.Y.Z` trigger the [release workflow](.github/workflows/release.yml), which tests and builds archives for Linux (amd64/arm64), macOS (arm64/amd64) and Windows (amd64), with `SHA256SUMS`.
+- `flowtrim version` prints the build version. Every record carries `rule_version`, a hash of the active rules.
 
-## License and trademarks
+```bash
+bash <<'FLOWTRIM_BUILD'
+set -euo pipefail
+cd "$HOME/src/flowtrim"
+make lint test build      # bin/flowtrim, bin/flowgen, bin/mockhec
+make release              # dist/*.tar.gz + SHA256SUMS
+FLOWTRIM_BUILD
+```
 
-Apache-2.0. Third-party notices are in [NOTICE](NOTICE). FlowTrim is an independent open-source project. "CrowdStrike", "Falcon" and "Falcon Next-Gen SIEM" are trademarks of CrowdStrike, Inc., used here only to describe compatibility. FlowTrim is not affiliated with, or endorsed by, ElastiFlow.
+## Project layout
+
+```
+cmd/flowtrim      the collector          internal/rules     reduction engine
+cmd/flowgen       traffic gen + replay   internal/enrich    enrichment modules
+cmd/mockhec       mock Onum / NG-SIEM    internal/output    HEC delivery + queue
+demo/             one-command demo       internal/app/ui    the console (embedded)
+deploy/           docker, systemd, sysctl, NG-SIEM parser, snmpsim data
+examples/         reference config + deployment profiles
+```
+
+## Contributing
+
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). `make lint test` must pass. Reduction features need a test that proves which detection signal they preserve. Report vulnerabilities privately ([SECURITY.md](SECURITY.md)).
+
+## License, trademarks, disclaimer
+
+**MIT** © 2026 Trip Nine and the FlowTrim contributors. See [LICENSE](LICENSE) and the third-party notices in [NOTICE](NOTICE).
+
+FlowTrim is an independent open-source project. "CrowdStrike", "Falcon", "Falcon Onum" and "Falcon Next-Gen SIEM" are trademarks of CrowdStrike, Inc. "ElastiFlow" is a trademark of ElastiFlow Inc. Those names are used only to describe interoperability and comparison. The project is not affiliated with or endorsed by either company. It ships no third-party GeoIP or threat-intelligence data. Validate any reduction policy in shadow mode before using it in production.

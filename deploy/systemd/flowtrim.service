@@ -1,6 +1,6 @@
 [Unit]
 Description=FlowTrim flow-log reducer for Falcon Next-Gen SIEM
-Documentation=https://github.com/tripnine/flowtrim
+Documentation=https://github.com/trip-nine/flowtrim
 After=network-online.target
 Wants=network-online.target
 

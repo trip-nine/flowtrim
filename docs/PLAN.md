@@ -36,7 +36,8 @@ inputs ──► normalize ──► engine (single goroutine) ──► encoder
 | v0.2 | Live-tenant validation (register items U1–U6). Helm chart (StatefulSet + PVC). Signed releases + SBOM (goreleaser, cosign). CI license scan. | Next |
 | v0.3 | Azure VNet flow logs (Blob + Event Grid), GCP VPC (Pub/Sub). S3+SQS pull for AWS. | Planned |
 | v0.2.x | `output.hec` with `ngsiem`/`onum`/`generic` presets, gzip probe, deployment profiles, user/setup/config docs | **Done** |
-| v0.4 | "First-seen destination" bypass (rare dst passes raw). Optional ASN/GeoIP enrichment (license-checked free DBs) for customers without Onum. SNMP ifName cache. | Planned |
+| v0.3.0 | **Enrichment parity** (GeoIP/ASN, DNS, hostnames, metadata, SNMP and file interface names, services, SaaS apps, threat lists, Community ID, client/server, pseudonymization, sampling overrides). **FlowTrim Console** UI. **Demo package** (IPFIX/v9/v5 captures + manifests, replay with retime, mock Onum → mock NG-SIEM). MIT license. | **Done** |
+| v0.4 | "First-seen destination" bypass. Interface names from v9/IPFIX option templates. Vendor IE mapping. Helm chart. Signed releases + SBOM. | Planned |
 | v1.0 | Multi-replica guidance with exporter affinity. CEL expressions in matchers. Per-rule rate limits. Zeek `conn.log` input. Hardening review. | Planned |
 
 ## 4. Risks and Unknowns Register
@@ -63,7 +64,7 @@ Status: **Open** = needs evidence; **Mitigated** = the design handles it, but it
 |---|---|---|---|---|
 | O1 | Which Onum Listener fits (Splunk HEC, HTTP, HTTP Standard Inbound), and its auth header and path | Output correctness | `target: onum` preset = `Splunk` auth on `/services/collector/event`. Override with `auth_scheme`/`path`. | Open |
 | O2 | Does the Onum Listener accept gzip and batched HEC bodies? What is its size limit? | Throughput | The gzip probe falls back safely. 413 splits. | Open |
-| O3 | Does the Onum pipeline re-wrap FlowTrim's event before the NG-SIEM Data Sink? | Double-nested JSON, wrong parser fields | Setup guide: forward the body unchanged. Verify in the lab. | Open |
+| O3 | Does the Onum pipeline re-wrap FlowTrim's event before the NG-SIEM Data Sink? | Double-nested JSON, wrong parser fields | Onum's CrowdStrike integration guide requires the NG-SIEM Data Sink's event format to be **Raw**. Set that, and verify in the lab. | Partly resolved |
 | O4 | Is the flow-end timestamp kept end to end? | `@timestamp` accuracy | HEC `time` = flow end. Check that the Onum sink passes it through. | Open |
 | O5 | Does Onum bill by volume? | Savings case | Reducing before Onum saves at both hops if it does | Open |
 | O6 | Where FlowTrim runs relative to Onum Distributors | Latency, failure domains | One per site, next to the Distributor, with exporter affinity | Mitigated |
@@ -104,8 +105,8 @@ Status: **Open** = needs evidence; **Mitigated** = the design handles it, but it
 
 | ID | Unknown | Handling | Status |
 |---|---|---|---|
-| L1 | **Employer IP and open-source approval.** The author works at CrowdStrike, and this tool targets a CrowdStrike product. | **Get written approval through CrowdStrike's OSS/legal process before publishing.** Decide whether it is a company project (CrowdStrike GitHub org) or a personal one. Use no internal or unreleased APIs or endpoints. | **Open: blocks publishing** |
-| L2 | License contamination | Every linked dependency is BSD-3, MIT or Apache-2.0 (see NOTICE). No ElastiFlow code, schema or field names. No GPL/AGPL (for example Akvorado). Add `go-licenses` to CI. | Mitigated |
+| L1 | **Employer IP and open-source approval.** The author works at CrowdStrike, and this tool targets a CrowdStrike product. | **Get written approval through CrowdStrike's OSS/legal process before publishing.** Decide whether it is a company project (CrowdStrike GitHub org) or a personal one. Use no internal or unreleased APIs or endpoints. | **Open.** The repo is created **private**; making it public waits on this. |
+| L2 | License contamination | Every linked dependency is MIT, BSD, ISC or Apache-2.0, all compatible with the MIT project license (see NOTICE). No ElastiFlow code, schema or field names. No GPL/AGPL (for example Akvorado). `go-licenses` runs in CI. | Mitigated |
 | L3 | Trademarks in the project name | The name avoids "Elasti-", "Falcon", "CrowdStrike" and "Onum". Those marks are used only nominatively. Run a GitHub and USPTO name search before publishing. | Open |
 | L4 | Support expectations once public | `SECURITY.md`, issue templates, "best effort, no SLA" in the README | Open |
 

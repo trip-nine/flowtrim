@@ -11,7 +11,7 @@ import (
 
 	"github.com/netsampler/goflow2/v2/utils"
 
-	"github.com/tripnine/flowtrim/internal/telemetry"
+	"github.com/trip-nine/flowtrim/internal/telemetry"
 )
 
 // udpServer owns sockets and decode workers. It replaces goflow2's receiver
