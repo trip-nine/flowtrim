@@ -196,6 +196,10 @@ deploy/           docker, systemd, sysctl, NG-SIEM parser, snmpsim data
 examples/         reference config + deployment profiles
 ```
 
+## Support
+
+FlowTrim is a community project, supported on a best-effort basis with no SLA. Ask questions and report bugs in [GitHub Issues](https://github.com/trip-nine/flowtrim/issues). It is not a CrowdStrike product, so CrowdStrike Support cannot help with it.
+
 ## Contributing
 
 Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). `make lint test` must pass. Reduction features need a test that proves which detection signal they preserve. Report vulnerabilities privately ([SECURITY.md](SECURITY.md)).

@@ -105,10 +105,10 @@ Status: **Open** = needs evidence; **Mitigated** = the design handles it, but it
 
 | ID | Unknown | Handling | Status |
 |---|---|---|---|
-| L1 | **Employer IP and open-source approval.** The author works at CrowdStrike, and this tool targets a CrowdStrike product. | **Get written approval through CrowdStrike's OSS/legal process before publishing.** Decide whether it is a company project (CrowdStrike GitHub org) or a personal one. Use no internal or unreleased APIs or endpoints. | **Open.** The repo is created **private**; making it public waits on this. |
+| L1 | **Project ownership.** FlowTrim works with CrowdStrike products but is not CrowdStrike software. | It is an independent, community open-source project under the personal `trip-nine` GitHub account, built for the CrowdStrike user community. It uses only public, documented APIs and endpoints (HEC, NG-SIEM HTTP Event Collector, Onum HTTP listener). The README states it is not affiliated with or endorsed by CrowdStrike. | **Resolved.** The repo has been public since 2026-11-16. |
 | L2 | License contamination | Every linked dependency is MIT, BSD, ISC or Apache-2.0, all compatible with the MIT project license (see NOTICE). No ElastiFlow code, schema or field names. No GPL/AGPL (for example Akvorado). `go-licenses` runs in CI. | Mitigated |
-| L3 | Trademarks in the project name | The name avoids "Elasti-", "Falcon", "CrowdStrike" and "Onum". Those marks are used only nominatively. Run a GitHub and USPTO name search before publishing. | Open |
-| L4 | Support expectations once public | `SECURITY.md`, issue templates, "best effort, no SLA" in the README | Open |
+| L3 | Trademarks in the project name | The name avoids "Elasti-", "Falcon", "CrowdStrike" and "Onum". Those marks are used only nominatively, with a trademark notice in the README. A GitHub and USPTO search for "FlowTrim" is still worth doing. | Mitigated |
+| L4 | Support expectations now that the repo is public | `SECURITY.md`, bug and feature issue templates, and a "best effort, no SLA" Support section in the README | Mitigated |
 
 ### 4f. The "unknown unknowns" probe list
 
