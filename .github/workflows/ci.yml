@@ -16,7 +16,9 @@ jobs:
         run: |
           pip install --quiet snmpsim pysmi pysnmp
           mkdir -p /tmp/snmp && cp deploy/snmpsim/public.snmprec /tmp/snmp/
-          snmpsim-command-responder --data-dir=/tmp/snmp --agent-udpv4-endpoint=127.0.0.1:1161 --process-user=nobody --process-group=nogroup &
+          # snmpsim insists on dropping privileges only when started as root
+          if [ "$(id -u)" = 0 ]; then DROP="--process-user=nobody --process-group=nogroup"; else DROP=""; fi
+          snmpsim-command-responder --data-dir=/tmp/snmp --agent-udpv4-endpoint=127.0.0.1:1161 $DROP &
           sleep 5
           FLOWTRIM_SNMPSIM=127.0.0.1:1161 go test -run TestSNMPPollAgainstAgent -v ./internal/enrich/
       - name: License check (permissive only)
