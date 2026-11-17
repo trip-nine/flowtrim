@@ -39,7 +39,18 @@ def render(text: str) -> str:
         return f"\n\nMERMAIDBLOCK{len(blocks) - 1}\n\n"
 
     text = re.sub(r"```mermaid\n(.*?)```", stash, text, flags=re.S)
-    body = markdown.markdown(text, extensions=["tables", "fenced_code", "toc", "sane_lists"])
+    # let Markdown inside HTML blocks (README's centered hero) render
+    text = re.sub(r'<div align="center">', '<div align="center" class="hero" markdown="1">', text)
+    # remote badge images are blocked by the page's content policy: render as local pills
+    def badge(m):
+        label, url = m.group(1), m.group(2)
+        mm = re.search(r'badge/([^-]+(?:--[^-]+)*)-([^-]+(?:--[^-]+)*)-([0-9a-fA-F]{6}|[a-z]+)', url)
+        if mm:
+            k, v = mm.group(1).replace('--', '-'), mm.group(2).replace('--', '-')
+            return f'<span class="badge"><b>{k}</b><i>{v}</i></span>'
+        return f'<span class="badge"><b>{label}</b><i>passing</i></span>'
+    text = re.sub(r'\[!\[([^\]]*)\]\((https://[^)]+)\)\]\([^)]*\)', badge, text)
+    body = markdown.markdown(text, extensions=["tables", "fenced_code", "toc", "sane_lists", "md_in_html"])
     for i, b in enumerate(blocks):
         body = body.replace(f"<p>MERMAIDBLOCK{i}</p>", f'<pre class="mermaid">{html.escape(b)}</pre>')
 
@@ -93,6 +104,12 @@ pre {{ background:var(--code); padding:12px 14px; border-radius:8px; overflow-x:
 pre code {{ background:none; padding:0 }}
 pre.mermaid {{ background:transparent; text-align:center; padding:8px 0 }}
 img {{ max-width:100%; height:auto; border:1px solid var(--line); border-radius:10px }}
+.hero {{ text-align:center; padding:10px 0 6px }}
+.hero h1 {{ font-size:2.2rem; margin:.3em 0 .2em }}
+.hero p {{ max-width:760px; margin:.6em auto }}
+.badge {{ display:inline-flex; margin:3px; font-size:12px; border-radius:6px; overflow:hidden; border:1px solid var(--line) }}
+.badge b {{ background:#444; color:#fff; padding:2px 7px; font-weight:600 }}
+.badge i {{ background:#6d5efc; color:#fff; padding:2px 7px; font-style:normal }}
 .tablewrap {{ overflow-x:auto; margin:1em 0 }}
 table {{ border-collapse:collapse; width:100%; font-size:14px }}
 th, td {{ border-bottom:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top }}
@@ -127,6 +144,12 @@ function show() {{
   }}
   window.scrollTo(0, 0);
 }}
+document.addEventListener('click', e => {{
+  const a = e.target.closest('[data-anchor]'); if (!a) return;
+  const sec = a.closest('.page'); const t = sec && sec.querySelector('#' + CSS.escape(a.dataset.anchor));
+  if (t) {{ e.preventDefault(); t.scrollIntoView({{behavior:'smooth', block:'start'}}); }}
+}});
+document.querySelectorAll('[data-anchor]').forEach(a => {{ a.style.cursor = 'pointer'; }});
 addEventListener('hashchange', show); show();
 </script>
 </body></html>"""
