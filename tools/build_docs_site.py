@@ -14,6 +14,9 @@ import markdown
 repo = Path(sys.argv[1])
 out = Path(sys.argv[2])
 
+GHCARD = ('<div class="ghcard"><a class="ghbtn" href="https://github.com/trip-nine/flowtrim" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> trip-nine/flowtrim</a>'
+          '<span>Source, releases and issues on GitHub. Clone with <code>git clone https://github.com/trip-nine/flowtrim.git</code></span></div>')
+
 PAGES = [
     ("home", "Home", repo / "README.md"),
     ("quick", "0 · Quick start", repo / "docs/00-quickstart.md"),
@@ -76,7 +79,10 @@ def render(text: str) -> str:
 sections = []
 nav = []
 for pid, title, path in PAGES:
-    sections.append(f'<section id="page-{pid}" class="page" hidden>{render(path.read_text())}</section>')
+    body = render(path.read_text())
+    if pid == "home":
+        body = GHCARD + body
+    sections.append(f'<section id="page-{pid}" class="page" hidden>{body}</section>')
     nav.append(f'<a href="#{pid}" data-page="{pid}">{html.escape(title)}</a>')
 
 page = f"""<!DOCTYPE html>
@@ -90,6 +96,12 @@ page = f"""<!DOCTYPE html>
 body {{ margin:0; background:var(--bg); color:var(--fg); font:15.5px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }}
 header {{ position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }}
 .brand {{ padding:12px 20px 4px; font-weight:700; letter-spacing:.2px }}
+.brand {{ display:flex; align-items:center; gap:8px; flex-wrap:wrap }}
+.ghbtn {{ margin-left:auto; display:inline-flex; align-items:center; gap:6px; text-decoration:none; color:var(--fg); border:1px solid var(--line); background:var(--code); border-radius:999px; padding:4px 12px; font-size:13px; font-weight:600 }}
+.ghbtn:hover {{ border-color:var(--accent); color:var(--accent) }}
+.ghcard {{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; border:1px solid var(--line); background:var(--code); border-radius:12px; padding:12px 16px; margin:14px 0 4px }}
+.ghcard code {{ background:var(--bg) }}
+.ghcard .ghbtn {{ margin-left:0; background:var(--bg) }}
 .brand span {{ color:var(--muted); font-weight:500; margin-left:8px; font-size:13px }}
 nav {{ display:flex; gap:4px; overflow-x:auto; padding:6px 14px 10px; scrollbar-width:none }}
 nav a {{ white-space:nowrap; text-decoration:none; color:var(--muted); padding:5px 11px; border-radius:999px; font-size:13.5px; border:1px solid transparent }}
@@ -119,9 +131,9 @@ blockquote {{ margin:1em 0; padding:.4em 1em; border-left:3px solid var(--accent
 footer {{ color:var(--muted); font-size:12.5px; text-align:center; padding:30px 0 }}
 </style></head>
 <body>
-<header><div class="brand">FlowTrim <span>docs · v0.3.0 · MIT</span></div><nav>{''.join(nav)}</nav></header>
+<header><div class="brand">FlowTrim <span>docs · v0.3.0 · MIT</span><a class="ghbtn" href="https://github.com/trip-nine/flowtrim" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> View on GitHub</a></div><nav>{''.join(nav)}</nav></header>
 <main>{''.join(sections)}
-<footer>Generated from the repository's Markdown (README.md and docs/). Edit those files, not this page.</footer></main>
+<footer>Generated from the repository's Markdown (README.md and docs/). Edit those files, not this page. · <a href="https://github.com/trip-nine/flowtrim" target="_blank" rel="noopener">github.com/trip-nine/flowtrim</a></footer></main>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
 const dark = matchMedia('(prefers-color-scheme: dark)').matches;
