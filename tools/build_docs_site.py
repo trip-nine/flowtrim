@@ -81,7 +81,9 @@ nav = []
 for pid, title, path in PAGES:
     body = render(path.read_text())
     if pid == "home":
-        body = GHCARD + body
+        i = body.find("<img")
+        j = body.find("</p>", i) if i >= 0 else -1
+        body = body[:j + 4] + GHCARD + body[j + 4:] if j >= 0 else GHCARD + body
     sections.append(f'<section id="page-{pid}" class="page" hidden>{body}</section>')
     nav.append(f'<a href="#{pid}" data-page="{pid}">{html.escape(title)}</a>')
 
